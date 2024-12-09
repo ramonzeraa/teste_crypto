@@ -1,144 +1,190 @@
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional
-from ta.trend import SMAIndicator, EMAIndicator, IchimokuIndicator, MACD
-from ta.momentum import RSIIndicator, StochasticOscillator
-from ta.volatility import BollingerBands, AverageTrueRange
-from ta.volume import VolumeWeightedAveragePrice
+from typing import Dict
 import logging
+from datetime import datetime
 
 class TechnicalAnalyzer:
     def __init__(self):
-        self.indicators: Dict = {}
-        self.patterns: Dict = {}
-        self.current_analysis: Dict = {}
-        
-    def analyze_realtime(self, data: pd.DataFrame) -> Dict:
-        """Analisa dados em tempo real e retorna indicadores"""
+        self.indicators = {}
+        self.signals = {}
+
+    def analyze(self, data: pd.DataFrame) -> Dict:
+        """Analisa dados técnicos"""
         try:
+            if data.empty:
+                return {}
+
             # Calcula indicadores
-            self._calculate_indicators(data)
-            # Identifica padrões
-            self._identify_patterns(data)
-            # Gera análise atual
-            self._generate_analysis()
+            self.calculate_rsi(data)
+            self.calculate_macd(data)
+            self.calculate_bollinger_bands(data)
             
-            return self.current_analysis
+            # Gera sinais
+            signals = {
+                'rsi': self._analyze_rsi(),
+                'macd': self._analyze_macd(),
+                'bb': self._analyze_bb(),
+                'trend': self._analyze_trend(data),
+                'timestamp': datetime.now()
+            }
+            
+            # Calcula força geral do sinal
+            signals['trend_strength'] = self._calculate_trend_strength(signals)
+            
+            return signals
             
         except Exception as e:
             logging.error(f"Erro na análise técnica: {e}")
             return {}
-    
-    def _calculate_indicators(self, data: pd.DataFrame):
-        """Calcula indicadores técnicos"""
+
+    def calculate_rsi(self, data: pd.DataFrame, period: int = 14):
+        """Calcula RSI"""
         try:
-            # Médias Móveis
-            self.indicators['sma_20'] = SMAIndicator(close=data['close'], window=20).sma_indicator()
-            self.indicators['sma_50'] = SMAIndicator(close=data['close'], window=50).sma_indicator()
-            self.indicators['ema_12'] = EMAIndicator(close=data['close'], window=12).ema_indicator()
-            self.indicators['ema_26'] = EMAIndicator(close=data['close'], window=26).ema_indicator()
+            close_delta = data['close'].diff()
             
-            # MACD
-            macd = MACD(close=data['close'])
-            self.indicators['macd_line'] = macd.macd()
-            self.indicators['macd_signal'] = macd.macd_signal()
+            # Calcula ganhos e perdas
+            gain = (close_delta.where(close_delta > 0, 0)).rolling(window=period).mean()
+            loss = (-close_delta.where(close_delta < 0, 0)).rolling(window=period).mean()
+            
+            rs = gain / loss
+            self.indicators['rsi'] = 100 - (100 / (1 + rs))
+            
+        except Exception as e:
+            logging.error(f"Erro no cálculo do RSI: {e}")
+
+    def calculate_macd(self, data: pd.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9):
+        """Calcula MACD"""
+        try:
+            exp1 = data['close'].ewm(span=fast, adjust=False).mean()
+            exp2 = data['close'].ewm(span=slow, adjust=False).mean()
+            macd = exp1 - exp2
+            signal_line = macd.ewm(span=signal, adjust=False).mean()
+            
+            self.indicators['macd'] = macd
+            self.indicators['macd_signal'] = signal_line
+            self.indicators['macd_hist'] = macd - signal_line
+            
+        except Exception as e:
+            logging.error(f"Erro no cálculo do MACD: {e}")
+
+    def calculate_bollinger_bands(self, data: pd.DataFrame, period: int = 20, std: int = 2):
+        """Calcula Bandas de Bollinger"""
+        try:
+            sma = data['close'].rolling(window=period).mean()
+            rolling_std = data['close'].rolling(window=period).std()
+            
+            self.indicators['bb_upper'] = sma + (rolling_std * std)
+            self.indicators['bb_middle'] = sma
+            self.indicators['bb_lower'] = sma - (rolling_std * std)
+            
+        except Exception as e:
+            logging.error(f"Erro no cálculo das Bandas de Bollinger: {e}")
+
+    def _analyze_rsi(self) -> Dict:
+        """Analisa sinais do RSI"""
+        try:
+            rsi = self.indicators.get('rsi', pd.Series())
+            if rsi.empty:
+                return {}
+                
+            last_rsi = rsi.iloc[-1]
+            return {
+                'value': last_rsi,
+                'oversold': last_rsi < 30,
+                'overbought': last_rsi > 70
+            }
+            
+        except Exception as e:
+            logging.error(f"Erro na análise do RSI: {e}")
+            return {}
+
+    def _analyze_macd(self) -> Dict:
+        """Analisa sinais do MACD"""
+        try:
+            hist = self.indicators.get('macd_hist', pd.Series())
+            if hist.empty:
+                return {}
+                
+            last_hist = hist.iloc[-1]
+            prev_hist = hist.iloc[-2]
+            
+            return {
+                'value': last_hist,
+                'crossover': prev_hist < 0 and last_hist > 0,
+                'crossunder': prev_hist > 0 and last_hist < 0
+            }
+            
+        except Exception as e:
+            logging.error(f"Erro na análise do MACD: {e}")
+            return {}
+
+    def _analyze_bb(self) -> Dict:
+        """Analisa sinais das Bandas de Bollinger"""
+        try:
+            if not all(k in self.indicators for k in ['bb_upper', 'bb_lower', 'bb_middle']):
+                return {}
+                
+            last_close = self.indicators['bb_middle'].index[-1]
+            
+            return {
+                'upper': self.indicators['bb_upper'].iloc[-1],
+                'lower': self.indicators['bb_lower'].iloc[-1],
+                'middle': self.indicators['bb_middle'].iloc[-1],
+                'width': (self.indicators['bb_upper'].iloc[-1] - 
+                         self.indicators['bb_lower'].iloc[-1]) / 
+                        self.indicators['bb_middle'].iloc[-1]
+            }
+            
+        except Exception as e:
+            logging.error(f"Erro na análise das BBs: {e}")
+            return {}
+
+    def _analyze_trend(self, data: pd.DataFrame) -> str:
+        """Analisa tendência geral"""
+        try:
+            sma_20 = data['close'].rolling(window=20).mean()
+            sma_50 = data['close'].rolling(window=50).mean()
+            
+            if sma_20.iloc[-1] > sma_50.iloc[-1]:
+                return 'bullish'
+            elif sma_20.iloc[-1] < sma_50.iloc[-1]:
+                return 'bearish'
+            else:
+                return 'neutral'
+                
+        except Exception as e:
+            logging.error(f"Erro na análise de tendência: {e}")
+            return 'neutral'
+
+    def _calculate_trend_strength(self, signals: Dict) -> float:
+        """Calcula força da tendência"""
+        try:
+            strength = 0.0
             
             # RSI
-            self.indicators['rsi'] = RSIIndicator(close=data['close']).rsi()
+            if 'rsi' in signals:
+                rsi = signals['rsi']['value']
+                if rsi > 70:
+                    strength += 0.3
+                elif rsi < 30:
+                    strength -= 0.3
             
-            # Bollinger Bands
-            bb = BollingerBands(close=data['close'])
-            self.indicators['bb_high'] = bb.bollinger_hband()
-            self.indicators['bb_low'] = bb.bollinger_lband()
-            self.indicators['bb_mid'] = bb.bollinger_mavg()
+            # MACD
+            if 'macd' in signals:
+                if signals['macd']['crossover']:
+                    strength += 0.3
+                elif signals['macd']['crossunder']:
+                    strength -= 0.3
             
-            # Ichimoku
-            ichimoku = IchimokuIndicator(high=data['high'], low=data['low'])
-            self.indicators['ichimoku_a'] = ichimoku.ichimoku_a()
-            self.indicators['ichimoku_b'] = ichimoku.ichimoku_b()
+            # Tendência
+            if signals.get('trend') == 'bullish':
+                strength += 0.4
+            elif signals.get('trend') == 'bearish':
+                strength -= 0.4
             
-            # VWAP
-            self.indicators['vwap'] = VolumeWeightedAveragePrice(
-                high=data['high'],
-                low=data['low'],
-                close=data['close'],
-                volume=data['volume']
-            ).volume_weighted_average_price()
-            
-        except Exception as e:
-            logging.error(f"Erro ao calcular indicadores: {e}")
-    
-    def _identify_patterns(self, data: pd.DataFrame):
-        """Identifica padrões de candlestick"""
-        try:
-            # Doji
-            self.patterns['doji'] = self._is_doji(data)
-            
-            # Hammer
-            self.patterns['hammer'] = self._is_hammer(data)
-            
-            # Engulfing
-            self.patterns['bullish_engulfing'] = self._is_bullish_engulfing(data)
-            self.patterns['bearish_engulfing'] = self._is_bearish_engulfing(data)
+            return np.clip(strength, -1, 1)
             
         except Exception as e:
-            logging.error(f"Erro ao identificar padrões: {e}")
-    
-    def _generate_analysis(self):
-        """Gera análise baseada nos indicadores e padrões"""
-        try:
-            self.current_analysis = {
-                'indicators': self._get_latest_indicators(),
-                'patterns': self.patterns,
-                'signals': self._generate_signals(),
-                'trend': self._identify_trend(),
-                'strength': self._calculate_trend_strength()
-            }
-        except Exception as e:
-            logging.error(f"Erro ao gerar análise: {e}")
-    
-    def _get_latest_indicators(self) -> Dict:
-        """Retorna os valores mais recentes dos indicadores"""
-        return {
-            name: float(values.iloc[-1]) if not values.empty else None
-            for name, values in self.indicators.items()
-        }
-    
-    def _generate_signals(self) -> Dict:
-        """Gera sinais baseados nos indicadores"""
-        signals = {
-            'macd_cross': self._check_macd_cross(),
-            'rsi_signal': self._check_rsi_signal(),
-            'bb_signal': self._check_bollinger_signal(),
-            'ma_cross': self._check_ma_cross()
-        }
-        return signals
-    
-    def _identify_trend(self) -> str:
-        """Identifica a tendência atual"""
-        try:
-            sma20 = self.indicators['sma_20'].iloc[-1]
-            sma50 = self.indicators['sma_50'].iloc[-1]
-            
-            if sma20 > sma50:
-                return 'uptrend'
-            elif sma20 < sma50:
-                return 'downtrend'
-            else:
-                return 'sideways'
-                
-        except Exception:
-            return 'undefined'
-    
-    def _calculate_trend_strength(self) -> float:
-        """Calcula a força da tendência atual"""
-        try:
-            rsi = self.indicators['rsi'].iloc[-1]
-            macd = abs(self.indicators['macd_line'].iloc[-1])
-            
-            # Normaliza valores entre 0 e 1
-            strength = (rsi / 100 + min(macd, 100) / 100) / 2
-            return round(strength, 2)
-            
-        except Exception:
+            logging.error(f"Erro no cálculo da força da tendência: {e}")
             return 0.0
