@@ -1,70 +1,28 @@
 from ..utils.config import Config
-from ..utils.notifications import NotificationSystem
-from ..data.binance_client import BinanceDataLoader
+from ..data.real_time_collector import RealTimeCollector
 import logging
-from datetime import datetime
 
 class TradingBot:
     def __init__(self):
-        # Inicialização dos componentes
-        self.config = Config()
-        self.notifications = NotificationSystem()
-        self.data_loader = BinanceDataLoader(
-            self.config.binance_api_key,
-            self.config.binance_api_secret
+        config = Config()
+        self.collector = RealTimeCollector(
+            api_key=config.binance_api_key,
+            api_secret=config.binance_api_secret
         )
-        
-        # Configurações de trading
-        self.symbol = "BTCUSDT"
-        self.timeframe = "1h"
-        self.is_running = False
-        
+    
     def start(self):
-        """Inicia o bot de trading"""
+        """Inicia o bot"""
         try:
-            self.is_running = True
-            self.notifications.send_alert(
-                "🤖 Bot iniciado com sucesso!",
-                priority="normal"
-            )
+            # Inicia coleta de dados
+            self.collector.start_collection('BTCUSDT')
             
-            while self.is_running:
-                self._process_market_data()
+            while True:
+                # Obtém dados em tempo real
+                current_data = self.collector.get_current_data()
                 
-        except Exception as e:
-            logging.error(f"Erro crítico: {str(e)}")
-            self.notifications.send_alert(
-                f"🚨 Erro crítico no bot: {str(e)}",
-                priority="high"
-            )
-            self.stop()
-
-    def stop(self):
-        """Para a execução do bot"""
-        self.is_running = False
-        self.notifications.send_alert(
-            "🛑 Bot finalizado",
-            priority="normal"
-        )
-
-    def _process_market_data(self):
-        """Processa os dados do mercado e toma decisões"""
-        try:
-            # Obtém dados históricos
-            data = self.data_loader.get_historical_klines(
-                symbol=self.symbol,
-                interval=self.timeframe
-            )
-            
-            if data is not None:
-                # TODO: Implementar análise técnica
-                # TODO: Implementar sistema de aprendizado
+                # TODO: Implementar análise dos dados
+                # TODO: Implementar machine learning
                 # TODO: Implementar tomada de decisão
-                pass
                 
-        except Exception as e:
-            logging.error(f"Erro ao processar dados: {e}")
-            self.notifications.send_alert(
-                f"⚠️ Erro ao processar dados: {str(e)}",
-                priority="medium"
-            )
+        except KeyboardInterrupt:
+            self.collector.stop_collection()
