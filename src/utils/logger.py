@@ -43,3 +43,15 @@ class TradingLogger:
         except Exception as e:
             print(f"Erro ao configurar arquivo de log: {str(e)}")
             raise
+    
+    def log_trade(self, trade_data: Dict[str, Any]):
+        """Registra informações de trade"""
+        try:
+            message = (
+                f"TRADE {trade_data['type']} | "
+                f"Symbol: {trade_data['symbol']} | "
+                f"Price: {trade_data['price']}"
+            )
+            self.logger.info(message)
+        except Exception as e:
+            self.logger.error(f"Erro ao registrar trade: {str(e)}")
