@@ -1,0 +1,23 @@
+{
+    "trading": {
+        "symbol": "BTCUSDT",
+        "timeframe": "1h",
+        "max_position_size": 0.1,
+        "initial_learning_mode": true
+    },
+    "binance": {
+        "api_key": "YOUR_API_KEY",
+        "api_secret": "YOUR_API_SECRET"
+    },
+    "twilio": {
+        "account_sid": "YOUR_ACCOUNT_SID",
+        "auth_token": "YOUR_AUTH_TOKEN",
+        "whatsapp_from": "whatsapp:+XXXXXXXXXXX",
+        "whatsapp_to": "whatsapp:+XXXXXXXXXXX"
+    },
+    "learning": {
+        "confidence_threshold": 0.75,
+        "min_patterns_required": 10,
+        "backtest_days": 30
+    }
+}
