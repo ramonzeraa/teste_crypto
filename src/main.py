@@ -1,9 +1,11 @@
 import asyncio
 import logging
-import sys
-import signal
 from src.core.bot import TradingBot
 from src.utils.logger import CustomLogger
+import sys
+import signal
+import time
+from datetime import datetime
 
 class BotRunner:
     def __init__(self):
@@ -11,10 +13,6 @@ class BotRunner:
         self.bot = None
         self.is_running = False
         
-        # Configura handlers para sinais do sistema
-        signal.signal(signal.SIGINT, self._handle_shutdown)
-        signal.signal(signal.SIGTERM, self._handle_shutdown)
-    
     async def start(self):
         """Inicia o bot"""
         try:
@@ -25,24 +23,34 @@ class BotRunner:
             # Mensagem inicial
             self.bot.monitor.send_alert(
                 "🚀 Bot iniciado\n"
+                f"Par: {self.bot.symbol}\n"
+                f"Timeframe: {self.bot.timeframe}\n"
                 "Monitorando mercado..."
             )
             
             # Loop principal
             while self.is_running:
                 try:
+                    self.logger.info(f"Analisando mercado: {datetime.now()}")
+                    
                     # Processa dados de mercado
-                    await self.bot._process_market_data()
+                    analysis = await self.bot._process_market_data()
+                    
+                    if analysis:
+                        self.logger.info(f"Análise técnica: {analysis.get('technical', {})}")
+                        self.logger.info(f"Análise sentimento: {analysis.get('sentiment', {})}")
                     
                     # Atualiza status do portfólio
-                    self.bot._update_portfolio_status()
+                    portfolio = self.bot._update_portfolio_status()
+                    if portfolio:
+                        self.logger.info(f"Status do portfólio: {portfolio}")
                     
-                    # Pequena pausa para não sobrecarregar
-                    await asyncio.sleep(1)
+                    # Aguarda intervalo configurado
+                    await asyncio.sleep(60)  # Analisa a cada 1 minuto
                     
                 except Exception as e:
                     self.logger.error(f"Erro no loop principal: {e}")
-                    await asyncio.sleep(5)  # Pausa maior em caso de erro
+                    await asyncio.sleep(5)
             
         except Exception as e:
             self.logger.error(f"Erro fatal: {e}")
@@ -55,18 +63,6 @@ class BotRunner:
             self.is_running = False
             
             if self.bot:
-                # Fecha posições abertas se configurado
-                if self.bot.config.config.get('trading', {}).get('close_positions_on_shutdown', False):
-                    self.logger.info("Fechando posições abertas...")
-                    for symbol in self.bot.portfolio_manager.positions:
-                        current_price = self.bot.data_loader.get_current_price(symbol)
-                        self.bot.portfolio_manager.close_position(
-                            symbol=symbol,
-                            exit_price=current_price,
-                            exit_reason='shutdown'
-                        )
-                
-                # Notifica desligamento
                 self.bot.monitor.send_alert(
                     "🛑 Bot finalizado\n"
                     "Todas as operações foram encerradas."
