@@ -15,6 +15,7 @@ from typing import Dict
 import json
 import numpy as np
 from ..trading.execution import OrderExecutor
+from ..portfolio.portfolio_manager import PortfolioManager
 
 class TradingBot:
     def __init__(self):
@@ -57,6 +58,8 @@ class TradingBot:
                 api_key=self.config.binance_api_key,
                 api_secret=self.config.binance_api_secret
             )
+            
+            self.portfolio_manager = PortfolioManager()
             
         except Exception as e:
             self.logger.error("Erro na inicialização do bot", exc_info=True)
@@ -203,7 +206,7 @@ class TradingBot:
             return None
 
     def _evaluate_signals(self, analysis: Dict):
-        """Avalia sinais e executa ordens"""
+        """Avalia sinais e executa ordens com gestão de portfólio"""
         try:
             if not analysis:
                 return
@@ -233,28 +236,59 @@ class TradingBot:
             if abs(signal_strength) > self.config.config['analysis']['ml']['confidence_threshold']:
                 side = 'BUY' if trade_direction > 0 else 'SELL'
                 
-                # Executa ordem
-                order_result = self.order_executor.execute_order(
-                    symbol=self.symbol,
-                    side=side,
-                    signal_strength=abs(signal_strength)
-                )
+                # Verifica portfólio antes de executar
+                portfolio_summary = self.portfolio_manager.get_portfolio_summary()
                 
-                # Registra e notifica
-                if order_result['status'] == 'success':
-                    self.logger.info(f"Ordem executada: {order_result}")
-                    self.monitor.send_alert(
-                        f"✅ Ordem executada\n"
-                        f"Lado: {side}\n"
-                        f"Preço: {order_result['entry_price']}\n"
-                        f"Tamanho: {order_result['position_size']}\n"
-                        f"Força do Sinal: {abs(signal_strength):.2%}"
+                # Executa ordem apenas se dentro dos limites
+                if len(self.portfolio_manager.positions) < self.config.config['trading']['max_positions']:
+                    order_result = self.order_executor.execute_order(
+                        symbol=self.symbol,
+                        side=side,
+                        signal_strength=abs(signal_strength)
                     )
-                else:
-                    self.logger.warning(f"Ordem rejeitada: {order_result}")
                     
+                    if order_result['status'] == 'success':
+                        # Adiciona posição ao portfólio
+                        self.portfolio_manager.add_position({
+                            'symbol': self.symbol,
+                            'side': side,
+                            'entry_price': order_result['entry_price'],
+                            'quantity': order_result['position_size'],
+                            'stop_loss': order_result['order']['stop_loss']['price'],
+                            'take_profit': order_result['order']['take_profit']['price']
+                        })
+                        
+                        # Atualiza e notifica
+                        self._update_portfolio_status()
+            
         except Exception as e:
-            self.logger.error(f"Erro na execução de ordem: {e}")
+            self.logger.error(f"Erro na execução: {e}")
+    
+    def _update_portfolio_status(self):
+        """Atualiza status do portfólio"""
+        try:
+            # Obtém preços atuais
+            current_prices = {
+                self.symbol: self.data_loader.get_current_price(self.symbol)
+            }
+            
+            # Atualiza posições
+            self.portfolio_manager.update_positions(current_prices)
+            
+            # Obtém resumo atualizado
+            summary = self.portfolio_manager.get_portfolio_summary()
+            
+            # Notifica se necessário
+            if summary['unrealized_pnl'] < 0 and abs(summary['unrealized_pnl']) > 100:  # $100
+                self.monitor.send_alert(
+                    f"⚠️ Alerta de P&L\n"
+                    f"P&L Não Realizado: ${summary['unrealized_pnl']:.2f}\n"
+                    f"Posições Abertas: {summary['total_positions']}\n"
+                    f"Retorno Total: {summary['return_pct']:.2f}%"
+                )
+            
+        except Exception as e:
+            self.logger.error(f"Erro na atualização do portfólio: {e}")
 
     def stop(self):
         """Para a execução do bot"""
