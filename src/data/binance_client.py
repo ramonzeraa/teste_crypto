@@ -1,13 +1,16 @@
 import websocket
-from typing import Callable, Dict
+from typing import Callable, Dict, Optional
 from datetime import datetime
 import json
 import numpy as np
 import logging
 from threading import Thread
+import pandas as pd
+from binance.client import Client
 
 class BinanceDataLoader:
     def __init__(self, api_key: str, api_secret: str):
+        self.client = Client(api_key, api_secret)
         self.ws_client = None
         self.orderbook_cache = {}
         self.trade_cache = []
@@ -97,3 +100,68 @@ class BinanceDataLoader:
                     })
         
         return walls
+    
+    def _handle_socket_error(self, ws, error):
+        """Trata erros do WebSocket"""
+        logging.error(f"Erro no WebSocket: {error}")
+        
+    def _handle_socket_close(self, ws, close_status_code, close_msg):
+        """Trata fechamento do WebSocket"""
+        logging.info("WebSocket fechado")
+        
+    def get_historical_klines(self, symbol: str, interval: str, 
+                            start_time: Optional[datetime] = None,
+                            limit: int = 1000) -> pd.DataFrame:
+        """Obtém dados históricos"""
+        try:
+            # Se não especificado, pega últimas 1000 velas
+            klines = self.client.get_klines(
+                symbol=symbol,
+                interval=interval,
+                limit=limit,
+                startTime=int(start_time.timestamp() * 1000) if start_time else None
+            )
+            
+            # Converte para DataFrame
+            df = pd.DataFrame(klines, columns=[
+                'timestamp', 'open', 'high', 'low', 'close', 'volume',
+                'close_time', 'quote_volume', 'trades', 'taker_buy_base',
+                'taker_buy_quote', 'ignore'
+            ])
+            
+            # Converte tipos
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            for col in ['open', 'high', 'low', 'close', 'volume']:
+                df[col] = df[col].astype(float)
+                
+            return df
+            
+        except Exception as e:
+            logging.error(f"Erro ao obter dados históricos: {e}")
+            return pd.DataFrame()
+    
+    def get_current_price(self, symbol: str) -> float:
+        """Obtém preço atual"""
+        try:
+            ticker = self.client.get_symbol_ticker(symbol=symbol)
+            return float(ticker['price'])
+        except Exception as e:
+            logging.error(f"Erro ao obter preço: {e}")
+            return 0.0
+    
+    def _update_trade_cache(self, trade_data: Dict):
+        """Atualiza cache de trades"""
+        try:
+            if hasattr(self, 'trade_cache'):
+                self.trade_cache.append({
+                    'price': float(trade_data['p']),
+                    'quantity': float(trade_data['q']),
+                    'time': datetime.fromtimestamp(trade_data['T'] / 1000),
+                    'buyer_maker': trade_data['m']
+                })
+                
+                # Mantém apenas últimos 1000 trades
+                if len(self.trade_cache) > 1000:
+                    self.trade_cache.pop(0)
+        except Exception as e:
+            logging.error(f"Erro ao atualizar cache de trades: {e}")
