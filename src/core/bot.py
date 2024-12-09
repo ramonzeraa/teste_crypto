@@ -1,21 +1,19 @@
-from ..utils.config import Config
+from src.data.binance_client import BinanceDataLoader
+from src.analysis.technical_analysis import TechnicalAnalyzer
+from src.analysis.sentiment_analyzer import SentimentAnalyzer
+from src.analysis.ml_analyzer import MLAnalyzer
+from src.utils.config import Config
+from src.utils.logger import CustomLogger
+from src.monitoring.monitor import SystemMonitor
+from src.portfolio.portfolio_manager import PortfolioManager
+from src.trading.execution import OrderExecutor
 from ..utils.notifications import NotificationSystem
-from ..data.binance_client import BinanceDataLoader
-from ..analysis.technical_analysis import TechnicalAnalyzer
-from ..analysis.sentiment_analyzer import SentimentAnalyzer
-from ..analysis.ml_analyzer import MLAnalyzer
-from ..trading.order_manager import OrderManager
-from ..risk.risk_manager import RiskManager
-from ..monitoring.monitor import SystemMonitor
-from ..utils.logger import CustomLogger
 import logging
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict
 import json
 import numpy as np
-from ..trading.execution import OrderExecutor
-from ..portfolio.portfolio_manager import PortfolioManager
 
 class TradingBot:
     def __init__(self):
