@@ -6,6 +6,7 @@ from ..analysis.news_analyzer import NewsAnalyzer
 from ..analysis.ml_analyzer import MLAnalyzer
 from ..trading.order_manager import OrderManager
 from ..risk.risk_manager import RiskManager
+from ..monitoring.monitor import SystemMonitor
 import logging
 import pandas as pd
 from datetime import datetime
@@ -27,6 +28,12 @@ class TradingBot:
             self.config.binance_api_secret
         )
         self.risk_manager = RiskManager()
+        self.monitor = SystemMonitor(
+            twilio_sid=self.config.twilio_sid,
+            twilio_token=self.config.twilio_token,
+            whatsapp_from=self.config.whatsapp_from,
+            whatsapp_to=self.config.whatsapp_to
+        )
         
         # Configurações de trading
         self.symbol = "BTCUSDT"
