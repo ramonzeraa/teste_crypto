@@ -11,9 +11,10 @@ from ..utils.notifications import NotificationSystem
 import logging
 import pandas as pd
 from datetime import datetime, timedelta
-from typing import Dict
+from typing import Dict, Optional
 import json
 import numpy as np
+import time
 
 class TradingBot:
     def __init__(self):
@@ -22,16 +23,18 @@ class TradingBot:
         self.config = Config()
         
         try:
-            # Inicializa data loader com credenciais
+            # Carrega configurações de trading
+            self.symbol = self.config.config['trading']['symbol']
+            self.timeframe = self.config.config['trading']['timeframe']
+            
+            # Inicializa componentes
             self.data_loader = BinanceDataLoader(
                 api_key=self.config.binance_api_key,
                 api_secret=self.config.binance_api_secret
             )
             
-            # Inicializa outros componentes
             self.technical_analyzer = TechnicalAnalyzer()
             self.sentiment_analyzer = SentimentAnalyzer()
-            self.ml_analyzer = MLAnalyzer()
             self.monitor = SystemMonitor(
                 twilio_sid=self.config.twilio_sid,
                 twilio_token=self.config.twilio_token,
@@ -39,29 +42,66 @@ class TradingBot:
                 whatsapp_to=self.config.whatsapp_to
             )
             
-            # Configurações de trading
-            self.symbol = self.config.config['trading']['symbol']
-            self.timeframe = self.config.config['trading']['timeframe']
-            self.is_running = False
-            
-            # Registra callbacks para dados em tempo real
-            self.data_loader.add_realtime_callback(self._handle_realtime_data)
-            
-            # Inicia stream de mercado
-            self.data_loader.start_market_stream(self.symbol)
-            
-            self.logger.info("Bot inicializado com sucesso")
-            
+            self.portfolio_manager = PortfolioManager()
             self.order_executor = OrderExecutor(
                 api_key=self.config.binance_api_key,
                 api_secret=self.config.binance_api_secret
             )
             
-            self.portfolio_manager = PortfolioManager()
+            # Tenta iniciar o stream algumas vezes
+            retries = 3
+            while retries > 0:
+                try:
+                    self.data_loader.start_market_stream(self.symbol)
+                    break
+                except Exception as e:
+                    retries -= 1
+                    if retries == 0:
+                        raise
+                    self.logger.warning(f"Tentando reconectar... ({3-retries}/3)")
+                    time.sleep(2)
+            
+            self.logger.info("Bot inicializado com sucesso")
             
         except Exception as e:
-            self.logger.error("Erro na inicialização do bot", exc_info=True)
+            self.logger.error(f"Erro na inicialização do bot", exc_info=True)
             raise
+
+    async def _process_market_data(self):
+        """Processa dados de mercado"""
+        try:
+            # Obtém dados históricos recentes
+            klines = self.data_loader.get_historical_klines(
+                symbol=self.symbol,
+                interval=self.timeframe,
+                limit=100
+            )
+            
+            if klines.empty:
+                self.logger.warning("Sem dados disponíveis")
+                return None
+            
+            # Análise técnica
+            analysis = self.technical_analyzer.analyze(klines)
+            
+            # Análise de sentimento
+            sentiment = self.sentiment_analyzer.analyze_market_sentiment(self.symbol)
+            
+            # Combina análises
+            market_analysis = {
+                'technical': analysis,
+                'sentiment': sentiment,
+                'timestamp': datetime.now()
+            }
+            
+            # Avalia sinais
+            self._evaluate_signals(market_analysis)
+            
+            return market_analysis
+            
+        except Exception as e:
+            self.logger.error(f"Erro no processamento: {e}")
+            return None
 
     def _handle_realtime_data(self, data: Dict):
         """Processa dados em tempo real"""
@@ -160,48 +200,6 @@ class TradingBot:
                 priority="high"
             )
             self.stop()
-
-    def _process_market_data(self):
-        """Processa dados do mercado em tempo real"""
-        try:
-            # Coleta dados
-            current_data = self.data_loader.get_historical_klines(
-                symbol=self.symbol,
-                interval=self.timeframe
-            )
-            
-            if current_data is not None:
-                # Análise técnica
-                technical_analysis = self.technical_analyzer.analyze_realtime(current_data)
-                
-                # Análise de notícias
-                news_analysis = self.news_analyzer.analyze_news()
-                
-                # Previsões ML
-                ml_predictions = self.ml_analyzer.predict(
-                    technical_analysis,
-                    news_analysis
-                )
-                
-                # Combina todas as análises
-                analysis = {
-                    'timestamp': datetime.now(),
-                    'technical': technical_analysis,
-                    'news': news_analysis,
-                    'predictions': ml_predictions
-                }
-                
-                # Aprende com resultados anteriores
-                if self.last_analysis:
-                    actual_price_change = current_data['close'].iloc[-1] - current_data['close'].iloc[-2]
-                    self.ml_analyzer.learn(self.last_analysis, actual_price_change)
-                
-                self.last_analysis = analysis
-                return analysis
-                
-        except Exception as e:
-            logging.error(f"Erro no processamento: {e}")
-            return None
 
     def _evaluate_signals(self, analysis: Dict):
         """Avalia sinais e executa ordens com gestão de portfólio"""
