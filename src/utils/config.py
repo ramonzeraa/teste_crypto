@@ -1,94 +1,154 @@
-from binance.client import Client
-from dotenv import load_dotenv
+"""
+Módulo de Configuração do Sistema
+"""
+from typing import Dict, Any
 import os
-from dataclasses import dataclass, field
-from typing import List, Dict
+from datetime import datetime
+from dotenv import load_dotenv
 
-# Carrega variáveis de ambiente
-load_dotenv()
-
-# Credenciais da API
-API_KEY = os.getenv('BINANCE_API_KEY')
-API_SECRET = os.getenv('BINANCE_API_SECRET')
-
-def get_default_timeframes() -> Dict[str, str]:
-    return {
-        "1m": Client.KLINE_INTERVAL_1MINUTE,
-        "5m": Client.KLINE_INTERVAL_5MINUTE,
-        "15m": Client.KLINE_INTERVAL_15MINUTE,
-        "1h": Client.KLINE_INTERVAL_1HOUR
-    }
-
-def get_default_ema_periods() -> tuple:
-    return (20, 50)
-
-@dataclass
-class TradingConfig:
-    # Configurações gerais
-    SYMBOL: str = "BTCUSDT"
-    UPDATE_INTERVAL: int = 30  # Reduzido para 30 segundos
-    ERROR_WAIT_TIME: int = 15  # Reduzido para 15 segundos
-    
-    # Timeframes para análise
-    TIMEFRAMES: Dict[str, str] = field(default_factory=get_default_timeframes)
-    
-    # Parâmetros de trading
-    VALOR_ENTRADA: float = 100.0
-    MIN_POSITION_SIZE: float = 0.001
-    MAX_POSITION_SIZE: float = 0.1
-    RISK_PER_TRADE: float = 0.02
-    LEVERAGE: int = 1
-    MAX_TRADES_PER_DAY: int = 10
-    
-    # Parâmetros de Stop Loss e Take Profit
-    STOP_LOSS_PCT: float = 0.01      # 1% stop loss
-    TAKE_PROFIT_PCT: float = 0.02    # 2% take profit
-    STOP_LOSS: float = 0.015         # 1.5% stop loss alternativo
-    TAKE_PROFIT: float = 0.03        # 3% take profit alternativo
-    EMERGENCY_STOP_LOSS: float = 0.05 # 5% stop loss emergencial
-    
-    # Parâmetros técnicos
-    RSI_PERIOD: int = 14
-    RSI_OVERSOLD: int = 30
-    RSI_OVERBOUGHT: int = 70
-    VOLUME_THRESHOLD: float = 1.5
-    ADX_THRESHOLD: int = 25
-    EMA_PERIODS: tuple = field(default_factory=get_default_ema_periods)
-    
-    # Parâmetros da IA
-    MIN_CONFIDENCE: float = 0.85
-    MIN_PROBABILITY: float = 0.65
-    MIN_CONSISTENCY: float = 0.60
-    TRAIN_TEST_SPLIT: float = 0.8
-    LOOKBACK_PERIOD: int = 200
-    
-    # Configurações de segurança
-    ENABLE_SPOT_TRADING: bool = True
-    ENABLE_MARGIN_TRADING: bool = False
-    
-    def __post_init__(self):
-        # Validações
-        if self.ENABLE_MARGIN_TRADING:
-            raise ValueError("Trading com margem desabilitado por segurança")
+class Config:
+    def __init__(self):
+        # Carrega variáveis de ambiente
+        load_dotenv()
         
-        if self.MAX_POSITION_SIZE > 100.0:
-            raise ValueError("Tamanho máximo da posição excede limite de segurança")
-
-# Instância global das configurações
-config = TradingConfig()
-
-# Para manter compatibilidade com código existente
-SYMBOL = config.SYMBOL
-UPDATE_INTERVAL = config.UPDATE_INTERVAL
-ERROR_WAIT_TIME = config.ERROR_WAIT_TIME
-MIN_POSITION_SIZE = config.MIN_POSITION_SIZE
-MAX_POSITION_SIZE = config.MAX_POSITION_SIZE
-RISK_PER_TRADE = config.RISK_PER_TRADE
-LEVERAGE = config.LEVERAGE
-TIMEFRAMES = config.TIMEFRAMES
-MIN_PROBABILITY = config.MIN_PROBABILITY
-MIN_CONSISTENCY = config.MIN_CONSISTENCY
-MAX_RSI = config.RSI_OVERBOUGHT
-MIN_RSI = config.RSI_OVERSOLD
-STOP_LOSS_PCT = config.STOP_LOSS
-TAKE_PROFIT_PCT = config.TAKE_PROFIT
+        # Configurações da API
+        self.api_config = {
+            'api_key': os.getenv('BINANCE_API_KEY'),
+            'api_secret': os.getenv('BINANCE_API_SECRET'),
+            'twilio_sid': os.getenv('TWILIO_ACCOUNT_SID'),
+            'twilio_token': os.getenv('TWILIO_AUTH_TOKEN'),
+            'whatsapp_to': os.getenv('WHATSAPP_TO'),
+            'whatsapp_from': os.getenv('WHATSAPP_FROM')
+        }
+        
+        # Configurações de Trading
+        self.trading_config = {
+            'symbol': 'BTCUSDT',
+            'timeframe': '1h',
+            'strategy': 'default',
+            'max_trades': 5,
+            'position_size': 0.02,  # 2% do capital
+            'stop_loss': 0.02,      # 2% stop loss
+            'take_profit': 0.04     # 4% take profit
+        }
+        
+        # Configurações do Sistema
+        self.system_config = {
+            'debug_mode': False,
+            'log_level': 'INFO',
+            'data_dir': 'data/',
+            'cache_duration': 300,  # 5 minutos
+            'retry_attempts': 3
+        }
+    
+    def validate_config(self) -> bool:
+        """Valida todas as configurações necessárias"""
+        try:
+            # Valida API keys
+            if not all([
+                self.api_config['api_key'],
+                self.api_config['api_secret']
+            ]):
+                raise ValueError("Credenciais da Binance não configuradas")
+                
+            # Valida Twilio
+            if not all([
+                self.api_config['twilio_sid'],
+                self.api_config['twilio_token'],
+                self.api_config['whatsapp_to'],
+                self.api_config['whatsapp_from']
+            ]):
+                raise ValueError("Credenciais do Twilio não configuradas")
+                
+            # Valida configurações de trading
+            if not all([
+                0 < self.trading_config['position_size'] < 1,
+                0 < self.trading_config['stop_loss'] < 1,
+                0 < self.trading_config['take_profit'] < 1
+            ]):
+                raise ValueError("Configurações de trading inválidas")
+                
+            return True
+            
+        except Exception as e:
+            raise Exception(f"Erro na validação de configurações: {str(e)}")
+    
+    def update_config(self, section: str, updates: Dict[str, Any]):
+        """Atualiza configurações específicas"""
+        try:
+            if section == 'trading':
+                self.trading_config.update(updates)
+            elif section == 'system':
+                self.system_config.update(updates)
+            elif section == 'api':
+                self.api_config.update(updates)
+            else:
+                raise ValueError(f"Seção de configuração inválida: {section}")
+                
+            # Valida após atualização
+            self.validate_config()
+            
+        except Exception as e:
+            raise Exception(f"Erro ao atualizar configurações: {str(e)}")
+    
+    def save_config(self, filepath: str = 'config/settings.json'):
+        """Salva configurações em arquivo"""
+        try:
+            import json
+            
+            config_data = {
+                'trading': self.trading_config,
+                'system': self.system_config,
+                'last_update': datetime.now().isoformat()
+            }
+            
+            # Não salva dados sensíveis
+            safe_api_config = {
+                k: v for k, v in self.api_config.items()
+                if not any(s in k for s in ['key', 'secret', 'token', 'sid'])
+            }
+            config_data['api'] = safe_api_config
+            
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            with open(filepath, 'w') as f:
+                json.dump(config_data, f, indent=4)
+                
+        except Exception as e:
+            raise Exception(f"Erro ao salvar configurações: {str(e)}")
+    
+    def load_config(self, filepath: str = 'config/settings.json'):
+        """Carrega configurações de arquivo"""
+        try:
+            import json
+            
+            if not os.path.exists(filepath):
+                return
+                
+            with open(filepath, 'r') as f:
+                config_data = json.load(f)
+            
+            # Atualiza configurações não sensíveis
+            self.trading_config.update(config_data.get('trading', {}))
+            self.system_config.update(config_data.get('system', {}))
+            
+            # Valida após carregamento
+            self.validate_config()
+            
+        except Exception as e:
+            raise Exception(f"Erro ao carregar configurações: {str(e)}")
+    
+    def get_config(self, section: str = None) -> Dict:
+        """Retorna configurações atuais"""
+        if section == 'trading':
+            return self.trading_config.copy()
+        elif section == 'system':
+            return self.system_config.copy()
+        elif section == 'api':
+            return {k: '***' if any(s in k for s in ['key', 'secret', 'token', 'sid'])
+                   else v for k, v in self.api_config.items()}
+        else:
+            return {
+                'trading': self.trading_config,
+                'system': self.system_config,
+                'api': self.get_config('api')
+            }
