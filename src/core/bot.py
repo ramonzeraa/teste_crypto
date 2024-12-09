@@ -5,6 +5,7 @@ from ..analysis.technical_analysis import TechnicalAnalyzer
 from ..analysis.news_analyzer import NewsAnalyzer
 from ..analysis.ml_analyzer import MLAnalyzer
 from ..trading.order_manager import OrderManager
+from ..risk.risk_manager import RiskManager
 import logging
 import pandas as pd
 from datetime import datetime
@@ -25,6 +26,7 @@ class TradingBot:
             self.config.binance_api_key,
             self.config.binance_api_secret
         )
+        self.risk_manager = RiskManager()
         
         # Configurações de trading
         self.symbol = "BTCUSDT"
@@ -96,7 +98,7 @@ class TradingBot:
             return None
 
     def _evaluate_signals(self, analysis: dict):
-        """Avalia sinais e executa ordens"""
+        """Avalia sinais e executa ordens com gestão de risco"""
         if not analysis:
             return
             
@@ -104,9 +106,17 @@ class TradingBot:
             confidence = analysis['predictions'].get('confidence', 0)
             direction = analysis['predictions'].get('direction', None)
             
-            # Alta confiança na previsão
-            if confidence > 0.8:
-                # Determina direção da ordem
+            # Verifica condições de risco
+            account_info = self.data_loader.client.get_account()
+            capital = float(account_info['totalAsset'])
+            
+            risk_check = self.risk_manager.can_open_position(
+                capital=capital,
+                position_size=capital * 0.01,  # 1% inicial
+                confidence=confidence
+            )
+            
+            if risk_check['allowed'] and confidence > 0.8:
                 side = "BUY" if direction else "SELL"
                 
                 # Executa ordem
@@ -116,20 +126,24 @@ class TradingBot:
                     confidence=confidence
                 )
                 
-                # Notifica resultado
+                # Registra trade
                 if order_result['status'] == 'success':
-                    self.notifications.send_alert(
-                        f"🎯 Ordem executada: {side}\n"
-                        f"Preço: {order_result['position']['entry_price']}\n"
-                        f"Tamanho: {order_result['position']['size']}\n"
-                        f"Confiança: {confidence:.2%}",
-                        priority="high"
-                    )
-                else:
-                    logging.warning(f"Ordem rejeitada: {order_result['reason']}")
+                    self.risk_manager.register_trade({
+                        'symbol': self.symbol,
+                        'side': side,
+                        'size': order_result['position']['size'],
+                        'entry_price': order_result['position']['entry_price'],
+                        'confidence': confidence,
+                        'profit_loss': 0  # Será atualizado no fechamento
+                    })
             
+            # Gera relatório periódico
+            if datetime.now().minute == 0:  # A cada hora
+                report = self.risk_manager.get_performance_report()
+                logging.info(f"Relatório de Performance: {report}")
+                
         except Exception as e:
-            logging.error(f"Erro na execução de ordens: {e}")
+            logging.error(f"Erro na avaliação de risco: {e}")
 
     def stop(self):
         """Para a execução do bot"""
