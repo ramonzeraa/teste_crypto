@@ -15,6 +15,7 @@ from typing import Dict, Optional
 import json
 import numpy as np
 import time
+from src.trading.risk_manager import RiskManager
 
 class TradingBot:
     def __init__(self):
@@ -43,9 +44,11 @@ class TradingBot:
             )
             
             self.portfolio_manager = PortfolioManager()
+            self.risk_manager = RiskManager(self.config.config['risk'])
             self.order_executor = OrderExecutor(
                 api_key=self.config.binance_api_key,
-                api_secret=self.config.binance_api_secret
+                api_secret=self.config.binance_api_secret,
+                risk_manager=self.risk_manager
             )
             
             # Tenta iniciar o stream algumas vezes
@@ -211,64 +214,121 @@ class TradingBot:
             self.stop()
 
     def _evaluate_signals(self, analysis: Dict):
-        """Avalia sinais e executa ordens com gestão de portfólio"""
+        """Avalia sinais e executa ordens"""
         try:
-            if not analysis:
+            signal_strength = analysis['technical']['trend_strength']
+            trade_direction = 1 if analysis['technical']['trend'] == 'bullish' else -1
+            
+            # Atualiza métricas de risco
+            current_prices = {
+                self.symbol: self.data_loader.get_current_price(self.symbol)
+            }
+            
+            risk_metrics = self.risk_manager.update_risk_metrics(
+                self.portfolio_manager.positions,
+                current_prices
+            )
+            
+            # Verifica se deve reduzir exposição
+            if self.risk_manager.should_reduce_exposure():
+                self.logger.warning(f"Risco elevado - Score: {risk_metrics['risk_score']:.2f}")
+                self._reduce_exposure()
                 return
             
-            # Obtém dados de sentimento
-            sentiment = analysis.get('sentiment', {})
-            sentiment_score = sentiment.get('overall', 0)
-            fear_greed = sentiment.get('fear_greed_index', {}).get('value', 50)
-            
-            # Obtém sinais técnicos
-            technical = analysis.get('technical', {})
-            
-            # Combina sinais
-            signal_strength = self._calculate_signal_strength(
-                technical_score=technical.get('trend_strength', 0),
-                sentiment_score=sentiment_score,
-                fear_greed_score=fear_greed
-            )
-            
-            # Define direção do trade
-            trade_direction = self._determine_trade_direction(
-                technical=technical,
-                sentiment=sentiment
-            )
-            
             # Se sinal forte o suficiente, executa ordem
-            if abs(signal_strength) > self.config.config['analysis']['ml']['confidence_threshold']:
+            if abs(signal_strength) > self.config.config['trading']['signal_threshold']:
                 side = 'BUY' if trade_direction > 0 else 'SELL'
                 
-                # Verifica portfólio antes de executar
-                portfolio_summary = self.portfolio_manager.get_portfolio_summary()
+                self.logger.info(f"Sinal detectado: {side} - Força: {abs(signal_strength):.2f}")
                 
-                # Executa ordem apenas se dentro dos limites
-                if len(self.portfolio_manager.positions) < self.config.config['trading']['max_positions']:
-                    order_result = self.order_executor.execute_order(
-                        symbol=self.symbol,
-                        side=side,
-                        signal_strength=abs(signal_strength)
-                    )
-                    
-                    if order_result['status'] == 'success':
-                        # Adiciona posição ao portfólio
-                        self.portfolio_manager.add_position({
-                            'symbol': self.symbol,
-                            'side': side,
-                            'entry_price': order_result['entry_price'],
-                            'quantity': order_result['position_size'],
-                            'stop_loss': order_result['order']['stop_loss']['price'],
-                            'take_profit': order_result['order']['take_profit']['price']
-                        })
-                        
-                        # Atualiza e notifica
-                        self._update_portfolio_status()
+                # Executa ordem
+                order_result = self.order_executor.execute_order(
+                    symbol=self.symbol,
+                    side=side,
+                    signal_strength=abs(signal_strength),
+                    technical_data=analysis['technical']
+                )
+                
+                if order_result['status'] == 'success':
+                    self._handle_successful_order(order_result, analysis)
+                else:
+                    self._handle_rejected_order(order_result)
             
         except Exception as e:
             self.logger.error(f"Erro na execução: {e}")
     
+    def _handle_successful_order(self, order_result: Dict, analysis: Dict):
+        """Processa ordem bem sucedida"""
+        try:
+            # Adiciona ao portfólio
+            self.portfolio_manager.add_position({
+                'symbol': self.symbol,
+                'side': order_result['order']['side'],
+                'entry_price': order_result['entry_price'],
+                'quantity': order_result['position_size'],
+                'stop_loss': order_result['stops']['stop_loss'],
+                'take_profit': order_result['stops']['take_profit']
+            })
+            
+            # Notifica
+            self.monitor.send_alert(
+                f"✅ Ordem executada\n"
+                f"Par: {self.symbol}\n"
+                f"Lado: {order_result['order']['side']}\n"
+                f"Preço: {order_result['entry_price']:.2f}\n"
+                f"Quantidade: {order_result['position_size']:.4f}\n"
+                f"Stop Loss: {order_result['stops']['stop_loss']:.2f}\n"
+                f"Take Profit: {order_result['stops']['take_profit']:.2f}\n"
+                f"Score de Risco: {self.risk_manager.risk_metrics['risk_score']:.2f}"
+            )
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao processar ordem: {e}")
+    
+    def _handle_rejected_order(self, order_result: Dict):
+        """Processa ordem rejeitada"""
+        try:
+            self.logger.warning(f"Ordem rejeitada: {order_result['reason']}")
+            
+            if order_result['reason'] == 'risk_limit':
+                self.monitor.send_alert(
+                    "⚠️ Ordem rejeitada - Limite de risco\n"
+                    f"Score de Risco: {self.risk_manager.risk_metrics['risk_score']:.2f}\n"
+                    f"Exposição: {self.risk_manager.risk_metrics['position_exposure']:.2%}"
+                )
+                
+        except Exception as e:
+            self.logger.error(f"Erro ao processar rejeição: {e}")
+    
+    def _reduce_exposure(self):
+        """Reduz exposição em caso de risco alto"""
+        try:
+            positions = self.portfolio_manager.get_positions()
+            if not positions:
+                return
+                
+            self.monitor.send_alert(
+                "🔄 Reduzindo exposição\n"
+                f"Score de Risco: {self.risk_manager.risk_metrics['risk_score']:.2f}\n"
+                "Fechando posições mais antigas..."
+            )
+            
+            # Fecha posições mais antigas primeiro
+            sorted_positions = sorted(
+                positions.items(),
+                key=lambda x: x[1]['entry_time']
+            )
+            
+            for symbol, position in sorted_positions[:len(sorted_positions)//2]:
+                self.portfolio_manager.close_position(
+                    symbol=symbol,
+                    exit_price=self.data_loader.get_current_price(symbol),
+                    exit_reason='risk_reduction'
+                )
+                
+        except Exception as e:
+            self.logger.error(f"Erro ao reduzir exposição: {e}")
+
     def _update_portfolio_status(self):
         """Atualiza status do portfólio"""
         try:

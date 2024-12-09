@@ -4,165 +4,130 @@ from typing import Dict, Optional
 import logging
 from datetime import datetime
 import numpy as np
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal
+from src.trading.risk_manager import RiskManager
 
 class OrderExecutor:
-    def __init__(self, api_key: str, api_secret: str):
+    def __init__(self, api_key: str, api_secret: str, risk_manager: RiskManager):
         self.client = Client(api_key, api_secret)
+        self.risk_manager = risk_manager
         self.open_orders = {}
         self.positions = {}
-        
-        # Configurações de risco
-        self.max_position_size = 0.02  # 2% do capital
-        self.max_slippage = 0.001     # 0.1% máximo de slippage
-        self.min_order_interval = 60   # 60 segundos entre ordens
-        self.last_order_time = None
     
-    def execute_order(self, symbol: str, side: str, signal_strength: float) -> Dict:
+    def execute_order(self, symbol: str, side: str, signal_strength: float,
+                     technical_data: Dict) -> Dict:
         """Executa ordem com gestão de risco"""
         try:
-            # Verifica restrições de tempo
-            if not self._can_place_order():
-                return {'status': 'rejected', 'reason': 'time_restriction'}
-            
             # Obtém dados da conta
             account = self.client.get_account()
             balance = self._get_available_balance(account)
             
-            # Calcula tamanho da ordem
-            order_size = self._calculate_position_size(
-                balance=balance,
-                signal_strength=signal_strength,
-                symbol=symbol
-            )
-            
-            if order_size == 0:
-                return {'status': 'rejected', 'reason': 'insufficient_size'}
-            
-            # Verifica preço atual
+            # Obtém dados técnicos
+            volatility = technical_data.get('bb', {}).get('width', 0.02)
             ticker = self.client.get_symbol_ticker(symbol=symbol)
             current_price = float(ticker['price'])
+            atr = technical_data.get('atr', volatility * current_price)
             
-            # Coloca ordem
-            order = self._place_order(
-                symbol=symbol,
-                side=side,
-                quantity=order_size,
-                price=current_price
+            # Calcula tamanho da posição
+            position_size = self.risk_manager.calculate_position_size(
+                capital=balance,
+                signal_strength=signal_strength,
+                volatility=volatility,
+                current_exposure=self.risk_manager.risk_metrics['position_exposure']
             )
+            
+            if position_size == 0:
+                return {'status': 'rejected', 'reason': 'insufficient_size'}
+            
+            # Verifica se pode abrir posição
+            if not self.risk_manager.can_open_position(symbol, float(position_size), balance):
+                return {'status': 'rejected', 'reason': 'risk_limit'}
+            
+            # Calcula stops
+            stops = self.risk_manager.calculate_stop_loss(
+                entry_price=current_price,
+                volatility=volatility,
+                atr=atr,
+                side=side
+            )
+            
+            # Coloca ordem principal
+            order = self._place_order(symbol, side, position_size, current_price)
             
             if order['status'] == 'FILLED':
                 # Coloca ordens de proteção
-                self._place_protection_orders(
+                protection_orders = self._place_protection_orders(
                     symbol=symbol,
                     entry_price=float(order['fills'][0]['price']),
                     quantity=float(order['executedQty']),
-                    side=side
+                    side=side,
+                    stops=stops
                 )
                 
-                self.last_order_time = datetime.now()
-                
-            return {
-                'status': 'success',
-                'order': order,
-                'position_size': order_size,
-                'entry_price': float(order['fills'][0]['price'])
-            }
+                return {
+                    'status': 'success',
+                    'order': order,
+                    'protection': protection_orders,
+                    'position_size': float(position_size),
+                    'entry_price': float(order['fills'][0]['price']),
+                    'stops': stops
+                }
+            
+            return {'status': 'error', 'reason': 'order_failed'}
             
         except Exception as e:
             logging.error(f"Erro na execução da ordem: {e}")
             return {'status': 'error', 'reason': str(e)}
     
-    def _calculate_position_size(self, balance: float, signal_strength: float, 
-                               symbol: str) -> float:
-        """Calcula tamanho da posição baseado na força do sinal"""
+    def _place_order(self, symbol: str, side: str, quantity: Decimal, price: float) -> Dict:
+        """Coloca ordem principal"""
         try:
-            # Base size é 1% do capital
-            base_size = balance * 0.01
-            
-            # Ajusta baseado na força do sinal (0.5 a 2.0)
-            size_multiplier = 0.5 + abs(signal_strength)
-            position_size = base_size * size_multiplier
-            
-            # Limita ao máximo permitido
-            position_size = min(position_size, balance * self.max_position_size)
-            
-            # Ajusta para precisão do símbolo
-            symbol_info = self.client.get_symbol_info(symbol)
-            lot_size_filter = next(filter(
-                lambda x: x['filterType'] == 'LOT_SIZE', 
-                symbol_info['filters']
-            ))
-            
-            step_size = float(lot_size_filter['stepSize'])
-            precision = len(str(step_size).split('.')[-1])
-            
-            return float(
-                Decimal(str(position_size))
-                .quantize(Decimal(str(step_size)), rounding=ROUND_DOWN)
+            order = self.client.create_order(
+                symbol=symbol,
+                side=side,
+                type='MARKET',
+                quantity=float(quantity)
             )
-            
+            return order
         except Exception as e:
-            logging.error(f"Erro no cálculo do tamanho: {e}")
-            return 0.0
+            logging.error(f"Erro ao colocar ordem: {e}")
+            raise
     
     def _place_protection_orders(self, symbol: str, entry_price: float, 
-                               quantity: float, side: str):
-        """Coloca ordens de stop loss e take profit"""
+                               quantity: float, side: str, stops: Dict) -> Dict:
+        """Coloca ordens de proteção"""
         try:
-            # Configurações de proteção
-            stop_loss_pct = 0.02  # 2%
-            take_profit_pct = 0.03  # 3%
+            opposite_side = 'SELL' if side == 'BUY' else 'BUY'
             
-            if side == 'BUY':
-                stop_price = entry_price * (1 - stop_loss_pct)
-                take_profit = entry_price * (1 + take_profit_pct)
-                sl_side = 'SELL'
-                tp_side = 'SELL'
-            else:
-                stop_price = entry_price * (1 + stop_loss_pct)
-                take_profit = entry_price * (1 - take_profit_pct)
-                sl_side = 'BUY'
-                tp_side = 'BUY'
-            
-            # Coloca stop loss
-            stop_loss_order = self.client.create_order(
+            # Stop Loss
+            stop_loss = self.client.create_order(
                 symbol=symbol,
-                side=sl_side,
+                side=opposite_side,
                 type='STOP_LOSS_LIMIT',
-                timeInForce='GTC',
                 quantity=quantity,
-                stopPrice=stop_price,
-                price=stop_price
+                price=stops['stop_loss'],
+                stopPrice=stops['stop_loss'],
+                timeInForce='GTC'
             )
             
-            # Coloca take profit
-            take_profit_order = self.client.create_order(
+            # Take Profit
+            take_profit = self.client.create_order(
                 symbol=symbol,
-                side=tp_side,
-                type='TAKE_PROFIT_LIMIT',
-                timeInForce='GTC',
+                side=opposite_side,
+                type='LIMIT',
                 quantity=quantity,
-                stopPrice=take_profit,
-                price=take_profit
+                price=stops['take_profit'],
+                timeInForce='GTC'
             )
             
             return {
-                'stop_loss': stop_loss_order,
-                'take_profit': take_profit_order
+                'stop_loss': stop_loss,
+                'take_profit': take_profit
             }
             
         except Exception as e:
             logging.error(f"Erro ao colocar ordens de proteção: {e}")
-            return None
-    
-    def _can_place_order(self) -> bool:
-        """Verifica se pode colocar nova ordem"""
-        if not self.last_order_time:
-            return True
-            
-        time_since_last = (datetime.now() - self.last_order_time).total_seconds()
-        return time_since_last >= self.min_order_interval
+            return {}
     
     def _get_available_balance(self, account: Dict) -> float:
         """Obtém saldo disponível em USDT"""
@@ -172,7 +137,6 @@ class OrderExecutor:
                 {'free': '0.0'}
             )
             return float(usdt_balance['free'])
-            
         except Exception as e:
             logging.error(f"Erro ao obter saldo: {e}")
-            return 0.0 
+            return 0.0
