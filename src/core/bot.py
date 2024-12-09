@@ -82,17 +82,26 @@ class TradingBot:
                 return None
             
             # Análise técnica
-            analysis = self.technical_analyzer.analyze(klines)
+            technical_analysis = self.technical_analyzer.analyze(klines)
             
             # Análise de sentimento
             sentiment = self.sentiment_analyzer.analyze_market_sentiment(self.symbol)
             
+            # Verifica divergência entre técnica e sentimento
+            if abs(technical_analysis['trend_strength']) > 0.3:
+                if (technical_analysis['trend'] == 'bearish' and sentiment['overall'] > 0.3) or \
+                   (technical_analysis['trend'] == 'bullish' and sentiment['overall'] < -0.3):
+                    technical_analysis['divergences']['indicators_sentiment'] = True
+            
             # Combina análises
             market_analysis = {
-                'technical': analysis,
+                'technical': technical_analysis,
                 'sentiment': sentiment,
                 'timestamp': datetime.now()
             }
+            
+            # Envia alerta se necessário
+            self.monitor.send_divergence_alert(market_analysis)
             
             # Avalia sinais
             self._evaluate_signals(market_analysis)
