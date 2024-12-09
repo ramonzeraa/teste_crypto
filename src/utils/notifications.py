@@ -25,7 +25,7 @@ class NotificationSystem:
             raise Exception(f"Erro ao configurar Twilio: {str(e)}")
     
     def send_whatsapp(self, message: str, priority: str = 'normal'):
-        """Envia mensagem via WhatsApp"""
+        """Enviar mensagem via WhatsApp"""
         try:
             # Formata mensagem baseado na prioridade
             if priority == 'high':
