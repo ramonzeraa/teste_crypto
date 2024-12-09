@@ -1,6 +1,7 @@
 from ..utils.config import Config
 from ..data.real_time_collector import RealTimeCollector
 import logging
+import pandas as pd
 
 class TradingBot:
     def __init__(self):
@@ -18,11 +19,28 @@ class TradingBot:
             
             while True:
                 # Obtém dados em tempo real
-                current_data = self.collector.get_current_data()
-                
-                # TODO: Implementar análise dos dados
-                # TODO: Implementar machine learning
-                # TODO: Implementar tomada de decisão
+                self._process_market_data()
                 
         except KeyboardInterrupt:
             self.collector.stop_collection()
+    
+    def _process_market_data(self):
+        """Processa dados do mercado em tempo real"""
+        try:
+            # Obtém dados
+            current_data = self.collector.get_current_data()
+            
+            # Converte para DataFrame
+            df = pd.DataFrame(current_data['trades'])
+            
+            # Analisa tecnicamente
+            analysis = self.technical_analyzer.analyze_realtime(df)
+            
+            # Log da análise
+            logging.info(f"Análise atual: {analysis}")
+            
+            # TODO: Usar análise para machine learning
+            # TODO: Tomar decisões de trading
+            
+        except Exception as e:
+            logging.error(f"Erro no processamento: {e}")
