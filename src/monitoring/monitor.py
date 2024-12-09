@@ -11,8 +11,10 @@ from plotly.subplots import make_subplots
 class SystemMonitor:
     def __init__(self, twilio_sid: str, twilio_token: str, whatsapp_from: str, whatsapp_to: str):
         self.twilio_client = Client(twilio_sid, twilio_token)
-        self.whatsapp_from = f"whatsapp:{whatsapp_from}"
-        self.whatsapp_to = f"whatsapp:{whatsapp_to}"
+        self.whatsapp_from = whatsapp_from.replace('whatsapp:', '')
+        self.whatsapp_to = whatsapp_to.replace('whatsapp:', '')
+        self.whatsapp_from = f"whatsapp:{self.whatsapp_from}"
+        self.whatsapp_to = f"whatsapp:{self.whatsapp_to}"
         self.metrics_history = []
         self.alerts = []
         self.system_status = {
@@ -85,7 +87,7 @@ class SystemMonitor:
                 "high": "🚨"
             }
             
-            emoji = priority_emojis.get(priority, "ℹ️")
+            emoji = priority_emojis.get(priority, "���️")
             formatted_message = f"{emoji} {message}\n\nHorário: {datetime.now()}"
             
             self.send_whatsapp(formatted_message)
