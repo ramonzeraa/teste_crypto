@@ -7,40 +7,34 @@ from ..analysis.ml_analyzer import MLAnalyzer
 from ..trading.order_manager import OrderManager
 from ..risk.risk_manager import RiskManager
 from ..monitoring.monitor import SystemMonitor
+from ..utils.logger import CustomLogger
 import logging
 import pandas as pd
 from datetime import datetime
 
 class TradingBot:
     def __init__(self):
-        # Inicialização dos componentes
+        # Inicializa logger e config primeiro
+        self.logger = CustomLogger("trading_bot").logger
         self.config = Config()
-        self.notifications = NotificationSystem()
-        self.data_loader = BinanceDataLoader(
-            self.config.binance_api_key,
-            self.config.binance_api_secret
-        )
-        self.technical_analyzer = TechnicalAnalyzer()
-        self.news_analyzer = NewsAnalyzer()
-        self.ml_analyzer = MLAnalyzer()
-        self.order_manager = OrderManager(
-            self.config.binance_api_key,
-            self.config.binance_api_secret
-        )
-        self.risk_manager = RiskManager()
-        self.monitor = SystemMonitor(
-            twilio_sid=self.config.twilio_sid,
-            twilio_token=self.config.twilio_token,
-            whatsapp_from=self.config.whatsapp_from,
-            whatsapp_to=self.config.whatsapp_to
-        )
         
-        # Configurações de trading
-        self.symbol = "BTCUSDT"
-        self.timeframe = "1h"
-        self.is_running = False
-        self.last_analysis = None
-        
+        try:
+            # Inicializa outros componentes
+            self.monitor = SystemMonitor(
+                twilio_sid=self.config.twilio_sid,
+                twilio_token=self.config.twilio_token,
+                whatsapp_from=self.config.whatsapp_from,
+                whatsapp_to=self.config.whatsapp_to
+            )
+            
+            # ... outros componentes ...
+            
+            self.logger.info("Bot inicializado com sucesso")
+            
+        except Exception as e:
+            self.logger.error("Erro na inicialização do bot", exc_info=True)
+            raise
+
     def start(self):
         """Inicia o bot de trading"""
         try:
