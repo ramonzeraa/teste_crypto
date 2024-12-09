@@ -30,16 +30,26 @@ class TradingBot:
             # Obtém dados
             current_data = self.collector.get_current_data()
             
-            # Converte para DataFrame
-            df = pd.DataFrame(current_data['trades'])
+            # Análise técnica
+            technical_analysis = self.technical_analyzer.analyze_realtime(
+                pd.DataFrame(current_data['trades'])
+            )
             
-            # Analisa tecnicamente
-            analysis = self.technical_analyzer.analyze_realtime(df)
+            # Análise de notícias
+            news_analysis = self.news_analyzer.analyze_news()
+            market_impact = self.news_analyzer.get_market_impact()
             
-            # Log da análise
-            logging.info(f"Análise atual: {analysis}")
+            # Combina análises
+            analysis = {
+                'technical': technical_analysis,
+                'news': news_analysis,
+                'market_impact': market_impact
+            }
             
-            # TODO: Usar análise para machine learning
+            # Log da análise completa
+            logging.info(f"Análise completa: {analysis}")
+            
+            # TODO: Alimentar sistema de machine learning
             # TODO: Tomar decisões de trading
             
         except Exception as e:
