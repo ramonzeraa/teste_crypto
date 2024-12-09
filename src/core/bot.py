@@ -235,8 +235,11 @@ class TradingBot:
                 self._reduce_exposure()
                 return
             
+            # Define threshold padrão se não existir na config
+            signal_threshold = self.config.config.get('trading', {}).get('signal_threshold', 0.2)
+            
             # Se sinal forte o suficiente, executa ordem
-            if abs(signal_strength) > self.config.config['trading']['signal_threshold']:
+            if abs(signal_strength) > signal_threshold:
                 side = 'BUY' if trade_direction > 0 else 'SELL'
                 
                 self.logger.info(f"Sinal detectado: {side} - Força: {abs(signal_strength):.2f}")
