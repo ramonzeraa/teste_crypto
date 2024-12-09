@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 import logging
 import numpy as np
+from typing import Dict, Optional
+import pandas as pd
 
 @dataclass
 class Position:
@@ -157,4 +159,144 @@ class RiskManager:
         
         # Verificar condições de mercado
         if self.market_conditions == 'LATERAL':
+            return False
+
+class RiskManagement:
+    def __init__(self):
+        self.config = {
+            'max_position_size': 0.02,  # 2% do capital
+            'max_daily_loss': 0.05,     # 5% do capital
+            'stop_loss_pct': 0.02,      # 2% stop loss
+            'take_profit_pct': 0.04,    # 4% take profit
+            'max_trades_day': 5,        # Máximo trades por dia
+        }
+        self.daily_stats = self.reset_daily_stats()
+        
+    def reset_daily_stats(self) -> Dict:
+        """Reseta estatísticas diárias"""
+        return {
+            'trades_count': 0,
+            'daily_pnl': 0.0,
+            'last_reset': datetime.now(),
+            'positions': []
+        }
+    
+    def calculate_position_size(self, capital: float, price: float) -> float:
+        """Calcula tamanho da posição baseado no risco"""
+        try:
+            risk_amount = capital * self.config['max_position_size']
+            return risk_amount / price
+            
+        except Exception as e:
+            raise Exception(f"Erro ao calcular position size: {str(e)}")
+    
+    def calculate_stop_loss(self, side: str, entry_price: float) -> float:
+        """Calcula nível de stop loss"""
+        try:
+            if side == 'BUY':
+                return entry_price * (1 - self.config['stop_loss_pct'])
+            else:
+                return entry_price * (1 + self.config['stop_loss_pct'])
+                
+        except Exception as e:
+            raise Exception(f"Erro ao calcular stop loss: {str(e)}")
+    
+    def calculate_take_profit(self, side: str, entry_price: float) -> float:
+        """Calcula nível de take profit"""
+        try:
+            if side == 'BUY':
+                return entry_price * (1 + self.config['take_profit_pct'])
+            else:
+                return entry_price * (1 - self.config['take_profit_pct'])
+                
+        except Exception as e:
+            raise Exception(f"Erro ao calcular take profit: {str(e)}")
+    
+    def check_risk_levels(self) -> Dict:
+        """Verifica níveis de risco atuais"""
+        try:
+            # Verifica reset diário
+            self._check_daily_reset()
+            
+            can_trade = True
+            reasons = []
+            
+            # Verifica número máximo de trades
+            if self.daily_stats['trades_count'] >= self.config['max_trades_day']:
+                can_trade = False
+                reasons.append("Limite diário de trades atingido")
+            
+            # Verifica perda máxima diária
+            if abs(self.daily_stats['daily_pnl']) >= self.config['max_daily_loss']:
+                can_trade = False
+                reasons.append("Limite de perda diária atingido")
+            
+            return {
+                'can_trade': can_trade,
+                'reasons': reasons,
+                'daily_stats': self.daily_stats
+            }
+            
+        except Exception as e:
+            raise Exception(f"Erro ao verificar níveis de risco: {str(e)}")
+    
+    def check_position(self, position: Dict) -> Dict:
+        """Verifica status da posição atual"""
+        try:
+            current_price = position.get('current_price')
+            if not current_price:
+                return {'should_close': False, 'reason': None}
+            
+            should_close = False
+            reason = None
+            
+            # Verifica Stop Loss
+            if position['side'] == 'BUY':
+                if current_price <= position['stop_loss']:
+                    should_close = True
+                    reason = "Stop Loss atingido"
+                elif current_price >= position['take_profit']:
+                    should_close = True
+                    reason = "Take Profit atingido"
+            else:  # SELL
+                if current_price >= position['stop_loss']:
+                    should_close = True
+                    reason = "Stop Loss atingido"
+                elif current_price <= position['take_profit']:
+                    should_close = True
+                    reason = "Take Profit atingido"
+            
+            return {
+                'should_close': should_close,
+                'reason': reason
+            }
+            
+        except Exception as e:
+            raise Exception(f"Erro ao verificar posição: {str(e)}")
+    
+    def update_stats(self, trade_result: Dict):
+        """Atualiza estatísticas de trading"""
+        try:
+            self.daily_stats['trades_count'] += 1
+            self.daily_stats['daily_pnl'] += trade_result.get('pnl', 0)
+            self.daily_stats['positions'].append(trade_result)
+            
+        except Exception as e:
+            raise Exception(f"Erro ao atualizar estatísticas: {str(e)}")
+    
+    def _check_daily_reset(self):
+        """Verifica e executa reset diário se necessário"""
+        now = datetime.now()
+        last_reset = self.daily_stats['last_reset']
+        
+        if now.date() > last_reset.date():
+            self.daily_stats = self.reset_daily_stats()
+    
+    def is_healthy(self) -> bool:
+        """Verifica se o sistema está saudável para operar"""
+        try:
+            risk_check = self.check_risk_levels()
+            return risk_check['can_trade']
+            
+        except Exception as e:
             return False
