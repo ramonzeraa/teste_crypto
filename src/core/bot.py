@@ -4,6 +4,7 @@ from ..data.binance_client import BinanceDataLoader
 from ..analysis.technical_analysis import TechnicalAnalyzer
 from ..analysis.news_analyzer import NewsAnalyzer
 from ..analysis.ml_analyzer import MLAnalyzer
+from ..trading.order_manager import OrderManager
 import logging
 import pandas as pd
 from datetime import datetime
@@ -20,6 +21,10 @@ class TradingBot:
         self.technical_analyzer = TechnicalAnalyzer()
         self.news_analyzer = NewsAnalyzer()
         self.ml_analyzer = MLAnalyzer()
+        self.order_manager = OrderManager(
+            self.config.binance_api_key,
+            self.config.binance_api_secret
+        )
         
         # Configurações de trading
         self.symbol = "BTCUSDT"
@@ -91,7 +96,7 @@ class TradingBot:
             return None
 
     def _evaluate_signals(self, analysis: dict):
-        """Avalia sinais e toma decisões"""
+        """Avalia sinais e executa ordens"""
         if not analysis:
             return
             
@@ -101,21 +106,30 @@ class TradingBot:
             
             # Alta confiança na previsão
             if confidence > 0.8:
-                signal = "COMPRA" if direction else "VENDA"
-                self.notifications.send_alert(
-                    f"🎯 Sinal forte detectado: {signal}\n"
-                    f"Confiança: {confidence:.2%}\n"
-                    f"Análise Técnica: {analysis['technical']['trend']}\n"
-                    f"Sentimento: {analysis['news']['overall_sentiment']:.2f}",
-                    priority="high"
+                # Determina direção da ordem
+                side = "BUY" if direction else "SELL"
+                
+                # Executa ordem
+                order_result = self.order_manager.execute_order(
+                    symbol=self.symbol,
+                    side=side,
+                    confidence=confidence
                 )
-            
-            # Registra métricas de performance
-            metrics = self.ml_analyzer.get_performance_metrics()
-            logging.info(f"Métricas de Performance: {metrics}")
+                
+                # Notifica resultado
+                if order_result['status'] == 'success':
+                    self.notifications.send_alert(
+                        f"🎯 Ordem executada: {side}\n"
+                        f"Preço: {order_result['position']['entry_price']}\n"
+                        f"Tamanho: {order_result['position']['size']}\n"
+                        f"Confiança: {confidence:.2%}",
+                        priority="high"
+                    )
+                else:
+                    logging.warning(f"Ordem rejeitada: {order_result['reason']}")
             
         except Exception as e:
-            logging.error(f"Erro na avaliação de sinais: {e}")
+            logging.error(f"Erro na execução de ordens: {e}")
 
     def stop(self):
         """Para a execução do bot"""
