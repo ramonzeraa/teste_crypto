@@ -2,7 +2,7 @@ from ..utils.config import Config
 from ..utils.notifications import NotificationSystem
 from ..data.binance_client import BinanceDataLoader
 from ..analysis.technical_analysis import TechnicalAnalyzer
-from ..analysis.news_analyzer import NewsAnalyzer
+from ..analysis.sentiment_analyzer import SentimentAnalyzer
 from ..analysis.ml_analyzer import MLAnalyzer
 from ..trading.order_manager import OrderManager
 from ..risk.risk_manager import RiskManager
@@ -11,6 +11,7 @@ from ..utils.logger import CustomLogger
 import logging
 import pandas as pd
 from datetime import datetime
+from typing import Dict
 
 class TradingBot:
     def __init__(self):
@@ -19,7 +20,16 @@ class TradingBot:
         self.config = Config()
         
         try:
+            # Inicializa data loader com credenciais
+            self.data_loader = BinanceDataLoader(
+                api_key=self.config.binance_api_key,
+                api_secret=self.config.binance_api_secret
+            )
+            
             # Inicializa outros componentes
+            self.technical_analyzer = TechnicalAnalyzer()
+            self.sentiment_analyzer = SentimentAnalyzer()
+            self.ml_analyzer = MLAnalyzer()
             self.monitor = SystemMonitor(
                 twilio_sid=self.config.twilio_sid,
                 twilio_token=self.config.twilio_token,
@@ -27,13 +37,99 @@ class TradingBot:
                 whatsapp_to=self.config.whatsapp_to
             )
             
-            # ... outros componentes ...
+            # Configurações de trading
+            self.symbol = self.config.config['trading']['symbol']
+            self.timeframe = self.config.config['trading']['timeframe']
+            self.is_running = False
+            
+            # Registra callbacks para dados em tempo real
+            self.data_loader.add_realtime_callback(self._handle_realtime_data)
+            
+            # Inicia stream de mercado
+            self.data_loader.start_market_stream(self.symbol)
             
             self.logger.info("Bot inicializado com sucesso")
             
         except Exception as e:
             self.logger.error("Erro na inicialização do bot", exc_info=True)
             raise
+
+    def _handle_realtime_data(self, data: Dict):
+        """Processa dados em tempo real"""
+        try:
+            if 'e' in data:  # Evento Binance
+                if data['e'] == 'trade':
+                    self._process_trade(data)
+                elif data['e'] == 'depth':
+                    self._process_orderbook(data)
+                elif data['e'] == 'kline':
+                    self._process_kline(data)
+                    
+        except Exception as e:
+            self.logger.error(f"Erro no processamento de dados: {e}")
+    
+    def _process_trade(self, trade_data: Dict):
+        """Processa trade em tempo real"""
+        try:
+            price = float(trade_data['p'])
+            quantity = float(trade_data['q'])
+            
+            # Atualiza análises
+            self.technical_analyzer.update_price(price)
+            market_depth = self.data_loader.get_market_depth(self.symbol)
+            
+            # Verifica sinais
+            if self._should_analyze_signals():
+                self._analyze_trading_signals({
+                    'price': price,
+                    'quantity': quantity,
+                    'market_depth': market_depth
+                })
+                
+        except Exception as e:
+            self.logger.error(f"Erro no processamento de trade: {e}")
+    
+    def _process_orderbook(self, depth_data: Dict):
+        """Processa atualização do orderbook"""
+        try:
+            if self._should_analyze_signals():
+                market_depth = self.data_loader.get_market_depth(self.symbol)
+                self._analyze_trading_signals({'market_depth': market_depth})
+                
+        except Exception as e:
+            self.logger.error(f"Erro no processamento do orderbook: {e}")
+    
+    def _should_analyze_signals(self) -> bool:
+        """Verifica se deve analisar sinais"""
+        # Implementa lógica para evitar análises muito frequentes
+        return True  # Simplificado para o exemplo
+    
+    def _analyze_trading_signals(self, data: Dict):
+        """Analisa sinais de trading"""
+        try:
+            # Análise técnica
+            technical_signals = self.technical_analyzer.analyze()
+            
+            # Análise de sentimento
+            sentiment = self.sentiment_analyzer.analyze_market_sentiment(self.symbol)
+            
+            # Análise ML
+            ml_predictions = self.ml_analyzer.predict({
+                'technical': technical_signals,
+                'sentiment': sentiment,
+                'market_depth': data.get('market_depth', {})
+            })
+            
+            # Avalia sinais
+            self._evaluate_signals({
+                'technical': technical_signals,
+                'sentiment': sentiment,
+                'predictions': ml_predictions,
+                'market_data': data
+            })
+            
+        except Exception as e:
+            self.logger.error(f"Erro na análise de sinais: {e}")
 
     def start(self):
         """Inicia o bot de trading"""
