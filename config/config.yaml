@@ -1,0 +1,98 @@
+# Configurações de Trading
+trading:
+  symbol: BTCUSDT
+  timeframe: 1h
+  max_positions: 3
+  position_size: 0.01
+  use_leverage: false
+  max_leverage: 1
+  min_order_interval: 3600  # em segundos
+
+# Configurações de Risco
+risk:
+  max_daily_loss: -0.03    # -3%
+  max_position_size: 0.05  # 5% do capital
+  stop_loss: 0.02         # 2%
+  take_profit: 0.03       # 3%
+  max_open_positions: 3
+  min_confidence: 0.8
+
+# Configurações de Análise
+analysis:
+  indicators:
+    rsi:
+      period: 14
+      oversold: 30
+      overbought: 70
+    macd:
+      fast_period: 12
+      slow_period: 26
+      signal_period: 9
+    bollinger_bands:
+      period: 20
+      std_dev: 2
+    moving_averages:
+      short_period: 9
+      long_period: 21
+
+  ml:
+    confidence_threshold: 0.8
+    training_period: 60    # dias
+    retraining_interval: 24  # horas
+    features:
+      - rsi
+      - macd
+      - bollinger_bands
+      - volume
+      - price_change
+
+# Configurações de Monitoramento
+monitoring:
+  alert_interval: 3600    # 1 hora em segundos
+  report_interval: 86400  # 24 horas em segundos
+  metrics_history_size: 1000
+  thresholds:
+    profit_warning: -0.02
+    profit_critical: -0.05
+    latency_warning: 2.0
+    memory_warning: 0.85
+    api_errors_threshold: 3
+
+# Configurações de Notificações
+notifications:
+  enabled: true
+  types:
+    - trade_executed
+    - stop_loss_hit
+    - take_profit_hit
+    - error_occurred
+    - daily_summary
+  priorities:
+    high:
+      - error_occurred
+      - stop_loss_hit
+    normal:
+      - trade_executed
+      - take_profit_hit
+    low:
+      - daily_summary
+
+# Configurações de Logs
+logging:
+  level: INFO
+  rotation:
+    max_size: 10485760  # 10MB
+    backup_count: 5
+  separate_files:
+    - trades
+    - errors
+    - performance
+
+# Configurações de API
+api:
+  retry_attempts: 3
+  retry_delay: 5
+  timeout: 30
+  endpoints:
+    base_url: https://api.binance.com
+    testnet: false 
