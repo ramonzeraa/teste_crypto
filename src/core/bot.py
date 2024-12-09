@@ -10,8 +10,10 @@ from ..monitoring.monitor import SystemMonitor
 from ..utils.logger import CustomLogger
 import logging
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict
+import json
+import numpy as np
 
 class TradingBot:
     def __init__(self):
@@ -249,3 +251,126 @@ class TradingBot:
             "🛑 Bot finalizado",
             priority="normal"
         )
+
+    def _analyze_market_conditions(self) -> Dict:
+        """Analisa condições atuais do mercado"""
+        try:
+            current_time = datetime.now()
+            
+            # Análise técnica
+            technical_analysis = self.technical_analyzer.analyze()
+            
+            # Análise de sentimento (com controle de frequência)
+            sentiment_data = {}
+            if (not self.last_sentiment_check or 
+                current_time - self.last_sentiment_check >= self.sentiment_check_interval):
+                sentiment_data = self.sentiment_analyzer.analyze_market_sentiment(self.symbol)
+                self.last_sentiment_check = current_time
+            
+            # Dados de mercado em tempo real
+            market_depth = self.data_loader.get_market_depth(self.symbol)
+            
+            # Combina análises
+            analysis = {
+                'technical': technical_analysis,
+                'sentiment': sentiment_data,
+                'market_depth': market_depth,
+                'timestamp': current_time
+            }
+            
+            # Registra análise
+            self.logger.info(f"Análise de mercado: {json.dumps(analysis, default=str)}")
+            
+            return analysis
+            
+        except Exception as e:
+            self.logger.error(f"Erro na análise de mercado: {e}")
+            return {}
+
+    def _evaluate_signals(self, analysis: Dict):
+        """Avalia sinais de trading"""
+        try:
+            if not analysis:
+                return
+            
+            # Obtém dados de sentimento
+            sentiment = analysis.get('sentiment', {})
+            sentiment_score = sentiment.get('overall', 0)
+            fear_greed = sentiment.get('fear_greed_index', {}).get('value', 50)
+            
+            # Obtém sinais técnicos
+            technical = analysis.get('technical', {})
+            
+            # Combina sinais
+            signal_strength = self._calculate_signal_strength(
+                technical_score=technical.get('trend_strength', 0),
+                sentiment_score=sentiment_score,
+                fear_greed_score=fear_greed
+            )
+            
+            # Define direção do trade
+            trade_direction = self._determine_trade_direction(
+                technical=technical,
+                sentiment=sentiment
+            )
+            
+            # Se sinal forte o suficiente, notifica
+            if abs(signal_strength) > self.config.config['analysis']['ml']['confidence_threshold']:
+                self.monitor.send_alert(
+                    f"🎯 Sinal forte detectado!\n"
+                    f"Direção: {'COMPRA' if trade_direction > 0 else 'VENDA'}\n"
+                    f"Força do Sinal: {abs(signal_strength):.2%}\n"
+                    f"Sentimento: {sentiment_score:.2f}\n"
+                    f"Fear & Greed: {fear_greed}\n"
+                    f"Análise Técnica: {technical.get('trend', 'neutro')}"
+                )
+            
+        except Exception as e:
+            self.logger.error(f"Erro na avaliação de sinais: {e}")
+
+    def _calculate_signal_strength(self, technical_score: float, 
+                                 sentiment_score: float,
+                                 fear_greed_score: float) -> float:
+        """Calcula força do sinal combinando diferentes métricas"""
+        try:
+            # Normaliza Fear & Greed para [-1, 1]
+            fear_greed_normalized = (fear_greed_score - 50) / 50
+            
+            # Pesos para cada componente
+            weights = {
+                'technical': 0.5,
+                'sentiment': 0.3,
+                'fear_greed': 0.2
+            }
+            
+            # Calcula média ponderada
+            signal = (
+                technical_score * weights['technical'] +
+                sentiment_score * weights['sentiment'] +
+                fear_greed_normalized * weights['fear_greed']
+            )
+            
+            return np.clip(signal, -1, 1)
+            
+        except Exception as e:
+            self.logger.error(f"Erro no cálculo de força do sinal: {e}")
+            return 0.0
+
+    def _determine_trade_direction(self, technical: Dict, sentiment: Dict) -> int:
+        """Determina direção do trade (-1 para venda, 1 para compra)"""
+        try:
+            # Pontuação técnica
+            technical_score = 1 if technical.get('trend') == 'bullish' else -1
+            
+            # Pontuação de sentimento
+            sentiment_score = np.sign(sentiment.get('overall', 0))
+            
+            # Combina sinais (prioriza análise técnica)
+            if technical_score == sentiment_score:
+                return technical_score
+            else:
+                return technical_score  # Em caso de divergência, segue o técnico
+                
+        except Exception as e:
+            self.logger.error(f"Erro na determinação de direção: {e}")
+            return 0
