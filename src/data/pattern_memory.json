@@ -1,0 +1,26 @@
+{
+  "MACD_NEGATIVO_TENDENCIA_ALTA": {
+    "wins": 818,
+    "losses": 566,
+    "consecutive_losses": 0,
+    "total_profit": 0.0,
+    "avg_win": 0.0,
+    "avg_loss": 0.0
+  },
+  "MACD_NEGATIVO_TENDENCIA_BAIXA": {
+    "wins": 816,
+    "losses": 574,
+    "consecutive_losses": 0,
+    "total_profit": 0.0,
+    "avg_win": 0.0,
+    "avg_loss": 0.0
+  },
+  "MACD_POSITIVO_TENDENCIA_ALTA": {
+    "wins": 154,
+    "losses": 116,
+    "consecutive_losses": 0,
+    "total_profit": 0.0,
+    "avg_win": 0.0,
+    "avg_loss": 0.0
+  }
+}
