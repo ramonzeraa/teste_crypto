@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from typing import Dict
 import json
 import numpy as np
+from ..trading.execution import OrderExecutor
 
 class TradingBot:
     def __init__(self):
@@ -51,6 +52,11 @@ class TradingBot:
             self.data_loader.start_market_stream(self.symbol)
             
             self.logger.info("Bot inicializado com sucesso")
+            
+            self.order_executor = OrderExecutor(
+                api_key=self.config.binance_api_key,
+                api_secret=self.config.binance_api_secret
+            )
             
         except Exception as e:
             self.logger.error("Erro na inicialização do bot", exc_info=True)
@@ -196,53 +202,59 @@ class TradingBot:
             logging.error(f"Erro no processamento: {e}")
             return None
 
-    def _evaluate_signals(self, analysis: dict):
-        """Avalia sinais e executa ordens com gestão de risco"""
-        if not analysis:
-            return
-            
+    def _evaluate_signals(self, analysis: Dict):
+        """Avalia sinais e executa ordens"""
         try:
-            confidence = analysis['predictions'].get('confidence', 0)
-            direction = analysis['predictions'].get('direction', None)
+            if not analysis:
+                return
             
-            # Verifica condições de risco
-            account_info = self.data_loader.client.get_account()
-            capital = float(account_info['totalAsset'])
+            # Obtém dados de sentimento
+            sentiment = analysis.get('sentiment', {})
+            sentiment_score = sentiment.get('overall', 0)
+            fear_greed = sentiment.get('fear_greed_index', {}).get('value', 50)
             
-            risk_check = self.risk_manager.can_open_position(
-                capital=capital,
-                position_size=capital * 0.01,  # 1% inicial
-                confidence=confidence
+            # Obtém sinais técnicos
+            technical = analysis.get('technical', {})
+            
+            # Combina sinais
+            signal_strength = self._calculate_signal_strength(
+                technical_score=technical.get('trend_strength', 0),
+                sentiment_score=sentiment_score,
+                fear_greed_score=fear_greed
             )
             
-            if risk_check['allowed'] and confidence > 0.8:
-                side = "BUY" if direction else "SELL"
+            # Define direção do trade
+            trade_direction = self._determine_trade_direction(
+                technical=technical,
+                sentiment=sentiment
+            )
+            
+            # Se sinal forte o suficiente, executa ordem
+            if abs(signal_strength) > self.config.config['analysis']['ml']['confidence_threshold']:
+                side = 'BUY' if trade_direction > 0 else 'SELL'
                 
                 # Executa ordem
-                order_result = self.order_manager.execute_order(
+                order_result = self.order_executor.execute_order(
                     symbol=self.symbol,
                     side=side,
-                    confidence=confidence
+                    signal_strength=abs(signal_strength)
                 )
                 
-                # Registra trade
+                # Registra e notifica
                 if order_result['status'] == 'success':
-                    self.risk_manager.register_trade({
-                        'symbol': self.symbol,
-                        'side': side,
-                        'size': order_result['position']['size'],
-                        'entry_price': order_result['position']['entry_price'],
-                        'confidence': confidence,
-                        'profit_loss': 0  # Será atualizado no fechamento
-                    })
-            
-            # Gera relatório periódico
-            if datetime.now().minute == 0:  # A cada hora
-                report = self.risk_manager.get_performance_report()
-                logging.info(f"Relatório de Performance: {report}")
-                
+                    self.logger.info(f"Ordem executada: {order_result}")
+                    self.monitor.send_alert(
+                        f"✅ Ordem executada\n"
+                        f"Lado: {side}\n"
+                        f"Preço: {order_result['entry_price']}\n"
+                        f"Tamanho: {order_result['position_size']}\n"
+                        f"Força do Sinal: {abs(signal_strength):.2%}"
+                    )
+                else:
+                    self.logger.warning(f"Ordem rejeitada: {order_result}")
+                    
         except Exception as e:
-            logging.error(f"Erro na avaliação de risco: {e}")
+            self.logger.error(f"Erro na execução de ordem: {e}")
 
     def stop(self):
         """Para a execução do bot"""
@@ -286,47 +298,6 @@ class TradingBot:
         except Exception as e:
             self.logger.error(f"Erro na análise de mercado: {e}")
             return {}
-
-    def _evaluate_signals(self, analysis: Dict):
-        """Avalia sinais de trading"""
-        try:
-            if not analysis:
-                return
-            
-            # Obtém dados de sentimento
-            sentiment = analysis.get('sentiment', {})
-            sentiment_score = sentiment.get('overall', 0)
-            fear_greed = sentiment.get('fear_greed_index', {}).get('value', 50)
-            
-            # Obtém sinais técnicos
-            technical = analysis.get('technical', {})
-            
-            # Combina sinais
-            signal_strength = self._calculate_signal_strength(
-                technical_score=technical.get('trend_strength', 0),
-                sentiment_score=sentiment_score,
-                fear_greed_score=fear_greed
-            )
-            
-            # Define direção do trade
-            trade_direction = self._determine_trade_direction(
-                technical=technical,
-                sentiment=sentiment
-            )
-            
-            # Se sinal forte o suficiente, notifica
-            if abs(signal_strength) > self.config.config['analysis']['ml']['confidence_threshold']:
-                self.monitor.send_alert(
-                    f"🎯 Sinal forte detectado!\n"
-                    f"Direção: {'COMPRA' if trade_direction > 0 else 'VENDA'}\n"
-                    f"Força do Sinal: {abs(signal_strength):.2%}\n"
-                    f"Sentimento: {sentiment_score:.2f}\n"
-                    f"Fear & Greed: {fear_greed}\n"
-                    f"Análise Técnica: {technical.get('trend', 'neutro')}"
-                )
-            
-        except Exception as e:
-            self.logger.error(f"Erro na avaliação de sinais: {e}")
 
     def _calculate_signal_strength(self, technical_score: float, 
                                  sentiment_score: float,
