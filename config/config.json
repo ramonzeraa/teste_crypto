@@ -12,8 +12,8 @@
     "twilio": {
         "account_sid": "YOUR_ACCOUNT_SID",
         "auth_token": "YOUR_AUTH_TOKEN",
-        "whatsapp_from": "whatsapp:+XXXXXXXXXXX",
-        "whatsapp_to": "whatsapp:+XXXXXXXXXXX"
+        "whatsapp_from": "whatsapp:+14155238886",
+        "whatsapp_to": "whatsapp:+556181473793"
     },
     "learning": {
         "confidence_threshold": 0.75,
