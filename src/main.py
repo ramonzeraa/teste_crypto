@@ -1,9 +1,9 @@
 import asyncio
 import logging
-from core.bot import TradingBot
-from utils.logger import CustomLogger
 import sys
 import signal
+from src.core.bot import TradingBot
+from src.utils.logger import CustomLogger
 
 class BotRunner:
     def __init__(self):
