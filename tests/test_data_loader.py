@@ -6,21 +6,25 @@ from unittest.mock import Mock, patch
 import pandas as pd
 from datetime import datetime, timedelta
 import os
+from dotenv import load_dotenv
 from src.data.loader import DataLoader
 
 class TestDataLoader(unittest.TestCase):
     def setUp(self):
         """Setup para cada teste"""
+        # Carrega variáveis de ambiente
+        load_dotenv()
+        
         self.loader = DataLoader()
-        # Usando variáveis de ambiente ao invés de hardcoded
-        self.api_key = os.getenv('BINANCE_API_KEY')
-        self.api_secret = os.getenv('BINANCE_API_SECRET')
         
-        # Para testes, podemos usar chaves fictícias se necessário
-        if not self.api_key or not self.api_secret:
-            self.api_key = "test_key_123"
-            self.api_secret = "test_secret_456"
-        
+        # Em ambiente de teste, usamos os mocks do Binance Client
+        # Não precisamos das chaves reais pois vamos simular as respostas
+        with patch('binance.client.Client'):
+            self.loader.connect(
+                api_key=os.getenv('BINANCE_API_KEY'),
+                api_secret=os.getenv('BINANCE_API_SECRET')
+            )
+    
     @patch('binance.client.Client')
     def test_connection(self, mock_client):
         """Testa conexão com Binance"""
@@ -28,7 +32,6 @@ class TestDataLoader(unittest.TestCase):
         mock_client.return_value.get_system_status.return_value = {'status': 0}
         
         # Testa conexão
-        self.loader.connect(self.api_key, self.api_secret)
         self.assertTrue(self.loader.connected)
         self.assertIsNotNone(self.loader.client)
     
@@ -44,8 +47,7 @@ class TestDataLoader(unittest.TestCase):
         ]
         mock_client.return_value.get_klines.return_value = mock_klines
         
-        # Conecta e obtém dados
-        self.loader.connect(self.api_key, self.api_secret)
+        # Obtém dados
         df = self.loader.get_latest_data('BTCUSDT', '1h')
         
         # Verifica estrutura
@@ -68,7 +70,6 @@ class TestDataLoader(unittest.TestCase):
         end_date = datetime.now()
         
         # Obtém dados
-        self.loader.connect(self.api_key, self.api_secret)
         df = self.loader.get_historical_data('BTCUSDT', '1h', start_date, end_date)
         
         # Verifica dados
@@ -104,7 +105,6 @@ class TestDataLoader(unittest.TestCase):
         }
         
         # Obtém saldo
-        self.loader.connect(self.api_key, self.api_secret)
         balance = self.loader.get_account_balance('USDT')
         
         # Verifica
@@ -128,7 +128,6 @@ class TestDataLoader(unittest.TestCase):
         mock_client.return_value.get_system_status.return_value = {'status': 0}
         
         # Testa conexão ativa
-        self.loader.connect(self.api_key, self.api_secret)
         self.assertTrue(self.loader.check_connection())
         
         # Simula falha
