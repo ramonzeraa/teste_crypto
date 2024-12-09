@@ -40,6 +40,14 @@ class Config:
             'cache_duration': 300,  # 5 minutos
             'retry_attempts': 3
         }
+        
+        # Adicionando configuração de notificações
+        self.notification_config = {
+            'twilio_sid': os.getenv('TWILIO_ACCOUNT_SID'),
+            'twilio_token': os.getenv('TWILIO_AUTH_TOKEN'),
+            'whatsapp_from': os.getenv('WHATSAPP_FROM'),
+            'whatsapp_to': os.getenv('WHATSAPP_TO')
+        }
     
     def validate_config(self) -> bool:
         """Valida todas as configurações necessárias"""
