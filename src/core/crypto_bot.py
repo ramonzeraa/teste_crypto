@@ -5,9 +5,9 @@ import logging
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from .paper_trading import PaperTrading
-from .technical_indicators import TechnicalIndicators
-from .config import config
+from ..trading.paper_trading import PaperTrading
+from ..analysis.technical_indicators import TechnicalIndicators
+from ..utils.config import config
 import ccxt
 import time
 import yfinance as yf

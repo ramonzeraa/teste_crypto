@@ -1,5 +1,5 @@
 import pytest
-from src.crypto_bot import CryptoTradingBot
+from src.core.crypto_bot import CryptoTradingBot
 import pandas as pd
 import os
 from dotenv import load_dotenv

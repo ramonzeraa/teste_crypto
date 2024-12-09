@@ -4,10 +4,10 @@ import numpy as np
 from datetime import datetime, timedelta
 import logging
 from sklearn.ensemble import RandomForestClassifier
-from .indicators import TechnicalIndicators
+from ..analysis.indicators import TechnicalIndicators
 import time
-from .paper_trading import PaperTrading  # Adiciona import
-from .config import config
+from ..trading.paper_trading import PaperTrading  # Adiciona import
+from ..utils.config import config
 from sklearn.model_selection import cross_val_score
 
 class TradingBot:

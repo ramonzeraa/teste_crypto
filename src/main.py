@@ -2,14 +2,14 @@ import logging
 from datetime import datetime, timedelta
 import time
 import random
-from .crypto_bot import CryptoTradingBot
-from .config import TradingConfig, config
-from .paper_trading import PaperTrading
-from .monitoring import TradingMonitor
-from .validation import TradingValidator
-from .market_expert import MarketExpert
-from .backtest import Backtest
-from .live_simulator import LiveSimulator
+from .core.crypto_bot import CryptoTradingBot
+from .utils.config import TradingConfig, config
+from .trading.paper_trading import PaperTrading
+from .utils.monitoring import TradingMonitor
+from .trading.validation import TradingValidator
+from .core.market_expert import MarketExpert
+from .analysis.backtest import Backtest
+from .core.live_simulator import LiveSimulator
 
 def countdown(seconds):
     """Mostra contagem regressiva"""

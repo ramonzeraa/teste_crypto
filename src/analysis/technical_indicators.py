@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from typing import Dict, Any, List, Tuple
 import logging
-from .config import config
+from ..utils.config import config
 
 class TechnicalIndicators:
     def __init__(self):

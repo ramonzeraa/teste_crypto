@@ -1,6 +1,6 @@
 import numpy as np
 import itertools
-from .backtest import Backtest
+from ..analysis.backtest import Backtest
 from datetime import datetime, timedelta
 
 def optimize_parameters():

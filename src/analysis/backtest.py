@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 import logging
-from src.config import config
-from src.crypto_bot import CryptoTradingBot
+from src.utils.config import config
+from src.core.crypto_bot import CryptoTradingBot
 import time
 import pandas as pd
 
