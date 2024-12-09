@@ -1,24 +1,24 @@
 """
-Módulo de Configuração do Sistema
+Configurações do Sistema
 """
-from typing import Dict, Any
 import os
-from datetime import datetime
+import json
+from pathlib import Path
 from dotenv import load_dotenv
+from datetime import datetime
+from typing import Dict, Any
+
+# Instância global de configuração
+config = None
 
 class Config:
     def __init__(self):
-        # Carrega variáveis de ambiente
+        """Inicializa configurações"""
         load_dotenv()
         
-        # Configurações da API
         self.api_config = {
             'api_key': os.getenv('BINANCE_API_KEY'),
-            'api_secret': os.getenv('BINANCE_API_SECRET'),
-            'twilio_sid': os.getenv('TWILIO_ACCOUNT_SID'),
-            'twilio_token': os.getenv('TWILIO_AUTH_TOKEN'),
-            'whatsapp_to': os.getenv('WHATSAPP_TO'),
-            'whatsapp_from': os.getenv('WHATSAPP_FROM')
+            'api_secret': os.getenv('BINANCE_API_SECRET')
         }
         
         # Configurações de Trading
@@ -160,3 +160,6 @@ class Config:
                 'system': self.system_config,
                 'api': self.get_config('api')
             }
+
+# Criar instância global
+config = Config()
