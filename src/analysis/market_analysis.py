@@ -148,3 +148,18 @@ class MarketAnalysis:
             
         except Exception as e:
             raise Exception(f"Erro ao calcular confiança: {str(e)}")
+    
+    def calculate_bollinger_bands(self, data: pd.DataFrame = None) -> Dict[str, pd.Series]:
+        """Calcula Bollinger Bands"""
+        try:
+            if data is None:
+                data = self.data
+            
+            bb = BollingerBands(close=data['close'])
+            return {
+                'upper': bb.bollinger_hband(),
+                'middle': bb.bollinger_mavg(),
+                'lower': bb.bollinger_lband()
+            }
+        except Exception as e:
+            raise Exception(f"Erro ao calcular Bollinger Bands: {str(e)}")
