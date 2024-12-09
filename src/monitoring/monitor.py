@@ -32,6 +32,9 @@ class SystemMonitor:
             'memory_warning': 0.85,     # 85% uso
             'api_errors_threshold': 3    # 3 erros em 1 hora
         }
+        
+        self.last_alert_time = {}
+        self.alert_cooldown = 300  # 5 minutos entre alertas do mesmo tipo
     
     def send_whatsapp(self, message: str, media_url: Optional[str] = None):
         """Envia mensagem via WhatsApp"""
@@ -131,3 +134,39 @@ class SystemMonitor:
         except Exception as e:
             logging.error(f"Erro ao enviar relatório: {e}")
             self.send_alert(f"Erro ao gerar relatório: {str(e)}", "high") 
+    
+    def send_divergence_alert(self, analysis: Dict):
+        """Envia alerta de divergência"""
+        try:
+            divergences = analysis.get('technical', {}).get('divergences', {})
+            if divergences.get('severity') in ['medium', 'high']:
+                current_time = datetime.now()
+                
+                # Verifica cooldown
+                if ('divergence' in self.last_alert_time and 
+                    (current_time - self.last_alert_time['divergence']).seconds < self.alert_cooldown):
+                    return
+                
+                # Prepara mensagem
+                message = "⚠️ Alerta de Divergência!\n\n"
+                
+                if divergences.get('price_rsi'):
+                    message += "- Divergência Preço/RSI detectada\n"
+                if divergences.get('price_macd'):
+                    message += "- Divergência Preço/MACD detectada\n"
+                if divergences.get('indicators_sentiment'):
+                    message += "- Divergência Indicadores/Sentimento detectada\n"
+                
+                message += f"\nSeveridade: {divergences['severity'].upper()}"
+                
+                # Adiciona dados técnicos
+                tech = analysis.get('technical', {})
+                message += f"\n\nRSI: {tech.get('rsi', {}).get('value', 0):.2f}"
+                message += f"\nTendência: {tech.get('trend', 'neutral')}"
+                message += f"\nForça: {tech.get('trend_strength', 0):.2f}"
+                
+                self.send_alert(message)
+                self.last_alert_time['divergence'] = current_time
+                
+        except Exception as e:
+            logging.error(f"Erro ao enviar alerta de divergência: {e}")
