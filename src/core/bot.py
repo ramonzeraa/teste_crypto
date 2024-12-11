@@ -16,9 +16,10 @@ import json
 import numpy as np
 import time
 from src.trading.risk_manager import RiskManager
+from src.trading.strategy import TradingStrategy
 
 class TradingBot:
-    def __init__(self):
+    def __init__(self, config: Dict):
         # Inicializa logger e config primeiro
         self.logger = CustomLogger("trading_bot").logger
         self.config = Config()
@@ -66,6 +67,8 @@ class TradingBot:
             
             self.logger.info("Bot inicializado com sucesso")
             
+            self.strategy = TradingStrategy(config)
+            
         except Exception as e:
             self.logger.error(f"Erro na inicialização do bot", exc_info=True)
             raise
@@ -101,14 +104,23 @@ class TradingBot:
                 current_prices
             )
             
+            # Gera sinal de trading
+            signal = self.strategy.generate_signal(
+                technical_analysis,
+                sentiment_analysis
+            )
+            
+            # Loga sinal
+            self.logger.info(f"Sinal gerado: {signal}")
+            
             return {
                 'technical': technical_analysis,
                 'sentiment': sentiment_analysis,
-                'timestamp': datetime.now()
+                'signal': signal
             }
             
         except Exception as e:
-            self.logger.error(f"Erro no processamento: {e}")
+            self.logger.error(f"Erro no processamento: {str(e)}")
             self.monitor.report_error("processamento_dados", str(e))
             return None
 

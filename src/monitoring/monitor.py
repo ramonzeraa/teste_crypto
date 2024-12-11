@@ -366,13 +366,13 @@ class SystemMonitor:
             
             # Verifica métricas de risco
             risk_metrics = self.metrics.get('risk', {})
-            if isinstance(risk_metrics, dict):  # Verifica se é um dicionário
-                risk_score = float(risk_metrics.get('risk_score', 0))  # Converte para float com valor padrão
+            if isinstance(risk_metrics, dict):
+                risk_score = float(risk_metrics.get('risk_score', 0))
             else:
                 risk_score = 0.0
             
             # Verifica se risco está alto
-            if risk_score > 0.8:  # 80% de risco
+            if risk_score > 0.8:
                 self.send_alert(
                     f"⚠️ Alerta de Risco Alto\n"
                     f"Score: {risk_score:.2%}"
