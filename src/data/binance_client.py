@@ -165,3 +165,82 @@ class BinanceDataLoader:
                     self.trade_cache.pop(0)
         except Exception as e:
             logging.error(f"Erro ao atualizar cache de trades: {e}")
+
+class BinanceClient:
+    def __init__(self, api_key: str, api_secret: str):
+        self.client = Client(api_key, api_secret)
+        self.logger = logging.getLogger('binance_client')
+
+    def get_symbol_info(self, symbol: str) -> Dict:
+        """Obtém informações do símbolo"""
+        try:
+            return self.client.get_symbol_info(symbol)
+        except Exception as e:
+            self.logger.error(f"Erro ao obter info do símbolo: {str(e)}")
+            return {}
+
+    def get_current_price(self, symbol: str) -> float:
+        """Obtém preço atual do símbolo"""
+        try:
+            ticker = self.client.get_symbol_ticker(symbol=symbol)
+            return float(ticker['price'])
+        except Exception as e:
+            self.logger.error(f"Erro ao obter preço: {str(e)}")
+            return 0.0
+
+    def get_asset_balance(self, asset: str) -> Dict:
+        """Obtém saldo de um ativo"""
+        try:
+            return self.client.get_asset_balance(asset=asset)
+        except Exception as e:
+            self.logger.error(f"Erro ao obter saldo: {str(e)}")
+            return {'free': '0.0', 'locked': '0.0'}
+
+    def create_order(self, **params) -> Dict:
+        """Cria uma ordem"""
+        try:
+            return self.client.create_order(**params)
+        except Exception as e:
+            self.logger.error(f"Erro ao criar ordem: {str(e)}")
+            raise
+
+    def get_open_orders(self, symbol: str = None) -> list:
+        """Obtém ordens abertas"""
+        try:
+            return self.client.get_open_orders(symbol=symbol)
+        except Exception as e:
+            self.logger.error(f"Erro ao obter ordens abertas: {str(e)}")
+            return []
+
+    def cancel_order(self, symbol: str, order_id: str) -> Dict:
+        """Cancela uma ordem"""
+        try:
+            return self.client.cancel_order(
+                symbol=symbol,
+                orderId=order_id
+            )
+        except Exception as e:
+            self.logger.error(f"Erro ao cancelar ordem: {str(e)}")
+            raise
+
+    def get_order_status(self, symbol: str, order_id: str) -> Dict:
+        """Obtém status de uma ordem"""
+        try:
+            return self.client.get_order(
+                symbol=symbol,
+                orderId=order_id
+            )
+        except Exception as e:
+            self.logger.error(f"Erro ao obter status da ordem: {str(e)}")
+            return {}
+
+    def get_all_orders(self, symbol: str, limit: int = 100) -> list:
+        """Obtém histórico de ordens"""
+        try:
+            return self.client.get_all_orders(
+                symbol=symbol,
+                limit=limit
+            )
+        except Exception as e:
+            self.logger.error(f"Erro ao obter histórico de ordens: {str(e)}")
+            return []
