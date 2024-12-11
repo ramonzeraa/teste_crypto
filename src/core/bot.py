@@ -73,7 +73,7 @@ class TradingBot:
     async def _process_market_data(self):
         """Processa dados de mercado"""
         try:
-            # Obtém dados históricos recentes
+            # Obtém dados históricos
             klines = self.data_loader.get_historical_klines(
                 symbol=self.symbol,
                 interval=self.timeframe,
@@ -84,35 +84,38 @@ class TradingBot:
                 self.logger.warning("Sem dados disponíveis")
                 return None
             
-            # Análise técnica
+            # Análise técnica com novos indicadores
             technical_analysis = self.technical_analyzer.analyze(klines)
             
             # Análise de sentimento
             sentiment = self.sentiment_analyzer.analyze_market_sentiment(self.symbol)
             
-            # Verifica divergência entre técnica e sentimento
-            if abs(technical_analysis['trend_strength']) > 0.3:
-                if (technical_analysis['trend'] == 'bearish' and sentiment['overall'] > 0.3) or \
-                   (technical_analysis['trend'] == 'bullish' and sentiment['overall'] < -0.3):
-                    technical_analysis['divergences']['indicators_sentiment'] = True
+            # Atualiza métricas de risco com novas métricas
+            current_prices = {
+                self.symbol: self.data_loader.get_current_price(self.symbol)
+            }
+            self.risk_manager.update_risk_metrics(
+                self.portfolio_manager.positions,
+                current_prices
+            )
             
-            # Combina análises
-            market_analysis = {
+            # Atualiza monitor com novas métricas
+            self.monitor.update_metrics({
+                'technical': technical_analysis,
+                'sentiment': sentiment,
+                'risk': self.risk_manager.risk_metrics,
+                'portfolio': self.portfolio_manager.get_portfolio_status()
+            })
+            
+            return {
                 'technical': technical_analysis,
                 'sentiment': sentiment,
                 'timestamp': datetime.now()
             }
             
-            # Envia alerta se necessário
-            self.monitor.send_divergence_alert(market_analysis)
-            
-            # Avalia sinais
-            self._evaluate_signals(market_analysis)
-            
-            return market_analysis
-            
         except Exception as e:
             self.logger.error(f"Erro no processamento: {e}")
+            self.monitor.report_error("processamento_dados", str(e))
             return None
 
     def _handle_realtime_data(self, data: Dict):
@@ -219,32 +222,17 @@ class TradingBot:
             signal_strength = analysis['technical']['trend_strength']
             trade_direction = 1 if analysis['technical']['trend'] == 'bullish' else -1
             
-            # Atualiza métricas de risco
-            current_prices = {
-                self.symbol: self.data_loader.get_current_price(self.symbol)
-            }
-            
-            risk_metrics = self.risk_manager.update_risk_metrics(
-                self.portfolio_manager.positions,
-                current_prices
-            )
-            
-            # Verifica se deve reduzir exposição
-            if self.risk_manager.should_reduce_exposure():
-                self.logger.warning(f"Risco elevado - Score: {risk_metrics['risk_score']:.2f}")
-                self._reduce_exposure()
-                return
-            
-            # Define threshold padrão se não existir na config
-            signal_threshold = self.config.config.get('trading', {}).get('signal_threshold', 0.2)
-            
-            # Se sinal forte o suficiente, executa ordem
-            if abs(signal_strength) > signal_threshold:
-                side = 'BUY' if trade_direction > 0 else 'SELL'
+            # Verifica força do sinal com novos parâmetros
+            if abs(signal_strength) > self.signal_threshold:
+                # Verifica condições de risco atualizadas
+                if not self.risk_manager.can_trade():
+                    self.logger.warning("Condições de risco não permitem trades")
+                    return
                 
+                side = 'BUY' if trade_direction > 0 else 'SELL'
                 self.logger.info(f"Sinal detectado: {side} - Força: {abs(signal_strength):.2f}")
                 
-                # Executa ordem
+                # Executa ordem com novos parâmetros de risco
                 order_result = self.order_executor.execute_order(
                     symbol=self.symbol,
                     side=side,
@@ -259,6 +247,7 @@ class TradingBot:
             
         except Exception as e:
             self.logger.error(f"Erro na execução: {e}")
+            self.monitor.report_error("execucao_ordem", str(e))
     
     def _handle_successful_order(self, order_result: Dict, analysis: Dict):
         """Processa ordem bem sucedida"""
