@@ -84,13 +84,15 @@ class TradingBot:
                 self.logger.warning("Sem dados disponíveis")
                 return None
             
-            # Análise técnica com novos indicadores
+            # Análise técnica
             technical_analysis = self.technical_analyzer.analyze(klines)
+            self.logger.info(f"Análise técnica: {technical_analysis}")
             
-            # Análise de sentimento
-            sentiment = self.sentiment_analyzer.analyze_market_sentiment(self.symbol)
+            # Análise de sentimento (removido o parâmetro symbol)
+            sentiment_analysis = self.sentiment_analyzer.analyze_market_sentiment()
+            self.logger.info(f"Análise sentimento: {sentiment_analysis}")
             
-            # Atualiza métricas de risco com novas métricas
+            # Atualiza métricas de risco
             current_prices = {
                 self.symbol: self.data_loader.get_current_price(self.symbol)
             }
@@ -99,17 +101,9 @@ class TradingBot:
                 current_prices
             )
             
-            # Atualiza monitor com novas métricas
-            self.monitor.update_metrics({
-                'technical': technical_analysis,
-                'sentiment': sentiment,
-                'risk': self.risk_manager.risk_metrics,
-                'portfolio': self.portfolio_manager.get_portfolio_status()
-            })
-            
             return {
                 'technical': technical_analysis,
-                'sentiment': sentiment,
+                'sentiment': sentiment_analysis,
                 'timestamp': datetime.now()
             }
             
