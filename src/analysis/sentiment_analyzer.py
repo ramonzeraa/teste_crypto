@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 class SentimentAnalyzer:
     def __init__(self):
+        self.logger = logging.getLogger('sentiment_analyzer')
         self.sentiment_cache = {}
         self.sources = {
             'fear_greed': 'https://api.alternative.me/fng/',
@@ -17,38 +18,39 @@ class SentimentAnalyzer:
         }
         self.cache_duration = timedelta(minutes=15)
     
-    def analyze_market_sentiment(self, symbol: str) -> Dict:
-        """Analisa sentimento geral do mercado"""
+    def analyze_market_sentiment(self) -> Dict:
+        """Analisa o sentimento do mercado"""
         try:
-            # Verifica cache
-            if self._is_cache_valid(symbol):
-                return self.sentiment_cache[symbol]
+            # Obtém Fear & Greed Index
+            fear_greed = self._get_fear_greed_index()
             
-            # Coleta dados de diferentes fontes
-            with ThreadPoolExecutor(max_workers=3) as executor:
-                fear_greed = executor.submit(self._get_fear_greed_index)
-                volume_analysis = executor.submit(self._analyze_volume_trend, symbol)
-                price_action = executor.submit(self._analyze_price_action, symbol)
+            # Analisa tendência de volume
+            volume_trend = self._analyze_volume_trend()
             
-            # Combina resultados
-            sentiment = {
-                'fear_greed_index': fear_greed.result(),
-                'volume_trend': volume_analysis.result(),
-                'price_action': price_action.result(),
-                'timestamp': datetime.now()
+            # Analisa price action
+            price_action = self._analyze_price_action()
+            
+            # Timestamp da análise
+            timestamp = datetime.now()
+            
+            # Calcula score geral
+            overall_score = (
+                fear_greed['value'] / 100 * 0.4 +  # 40% peso
+                volume_trend['strength'] * 0.3 +    # 30% peso
+                price_action['momentum'] * 0.3      # 30% peso
+            )
+            
+            return {
+                'fear_greed_index': fear_greed,
+                'volume_trend': volume_trend,
+                'price_action': price_action,
+                'timestamp': timestamp,
+                'overall': overall_score
             }
             
-            # Calcula sentimento geral
-            sentiment['overall'] = self._calculate_overall_sentiment(sentiment)
-            
-            # Atualiza cache
-            self.sentiment_cache[symbol] = sentiment
-            
-            return sentiment
-            
         except Exception as e:
-            logging.error(f"Erro na análise de sentimento: {e}")
-            return self._get_default_sentiment()
+            self.logger.error(f"Erro na análise de sentimento: {str(e)}")
+            return {}
     
     def _get_fear_greed_index(self) -> Dict:
         """Obtém índice Fear & Greed"""
@@ -66,7 +68,7 @@ class SentimentAnalyzer:
             logging.error(f"Erro ao obter Fear & Greed: {e}")
             return {'value': 50, 'classification': 'neutral'}
     
-    def _analyze_volume_trend(self, symbol: str) -> Dict:
+    def _analyze_volume_trend(self) -> Dict:
         """Analisa tendência do volume"""
         try:
             # Aqui você usaria o BinanceDataLoader para obter dados
@@ -81,7 +83,7 @@ class SentimentAnalyzer:
             logging.error(f"Erro na análise de volume: {e}")
             return {'trend': 'neutral', 'strength': 0.5}
     
-    def _analyze_price_action(self, symbol: str) -> Dict:
+    def _analyze_price_action(self) -> Dict:
         """Analisa ação do preço"""
         try:
             # Aqui você usaria o BinanceDataLoader para obter dados
