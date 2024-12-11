@@ -170,3 +170,23 @@ class SystemMonitor:
                 
         except Exception as e:
             logging.error(f"Erro ao enviar alerta de divergência: {e}")
+    
+    def update_metrics(self, data: Dict):
+        """Atualiza métricas de monitoramento"""
+        try:
+            # Métricas existentes...
+            
+            # Novas métricas
+            self.metrics.update({
+                'execution_latency': self._calculate_latency(),
+                'signal_quality': self._evaluate_signal_quality(data),
+                'risk_exposure': self._calculate_risk_exposure(),
+                'market_conditions': self._analyze_market_conditions()
+            })
+            
+            # Alertas aprimorados
+            self._check_alerts()
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao atualizar métricas: {e}")
+            raise
