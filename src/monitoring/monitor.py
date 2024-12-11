@@ -9,7 +9,25 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 class SystemMonitor:
-    def __init__(self, twilio_sid: str, twilio_token: str, whatsapp_from: str, whatsapp_to: str):
+    def __init__(self, twilio_sid: str, twilio_token: str, 
+                 whatsapp_from: str, whatsapp_to: str,
+                 alert_interval: int = 300):
+        """Inicializa o monitor do sistema"""
+        self.logger = logging.getLogger('system_monitor')
+        self.twilio_sid = twilio_sid
+        self.twilio_token = twilio_token
+        self.whatsapp_from = whatsapp_from
+        self.whatsapp_to = whatsapp_to
+        self.alert_interval = alert_interval
+        
+        # Inicializa métricas
+        self.metrics = {}
+        self.errors = []  # Lista de erros
+        self.max_errors = 1000  # Máximo de erros armazenados
+        self.last_alert_time = 0
+        
+        self.logger.info("Monitor do sistema inicializado")
+        
         self.twilio_client = Client(twilio_sid, twilio_token)
         self.whatsapp_from = whatsapp_from.replace('whatsapp:', '')
         self.whatsapp_to = whatsapp_to.replace('whatsapp:', '')
