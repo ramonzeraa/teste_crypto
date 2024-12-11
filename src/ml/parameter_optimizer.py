@@ -6,6 +6,7 @@ import logging
 from src.database.database import Database
 from sklearn.ensemble import RandomForestRegressor
 import joblib
+from .backtesting import Backtester
 
 class ParameterOptimizer:
     def __init__(self):
@@ -68,12 +69,34 @@ class ParameterOptimizer:
             # Salva no banco de dados
             self._save_performance(optimized_params, score, historical_data)
             
+            # Atualiza o modelo com os dados mais recentes
+            self.update_model(historical_data)
+            
+            # Após a otimização dos parâmetros
+            backtester = Backtester(self.model)
+            score = backtester.run_backtest(historical_data, optimized_params)
+            self.logger.info(f"Score do backtest: {score}")
+            
             return optimized_params
             
         except Exception as e:
             self.logger.error(f"Erro na otimização: {str(e)}")
             return current_params
 
+
+    def update_model(self, historical_data: Dict):
+        """Atualiza o modelo com novos dados históricos"""
+        try:
+            X = self._prepare_features(historical_data)
+            y = self._calculate_targets(historical_data)
+            
+            if X.shape[0] > 0:
+                self.model.fit(X, y)  # Treina o modelo com os novos dados
+                self.logger.info("Modelo atualizado com novos dados.")
+        except Exception as e:
+            self.logger.error(f"Erro ao atualizar o modelo: {str(e)}")
+            
+            
     def _prepare_features(self, data: Dict) -> np.array:
         """Prepara features para otimização"""
         prices = np.array(data['prices'])
