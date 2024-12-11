@@ -1,98 +1,81 @@
 # Configurações de Trading
 trading:
   symbol: BTCUSDT
-  timeframe: 1h
+  timeframe: 1m           # Alterado para 1m para maior granularidade
   max_positions: 3
   position_size: 0.01
   use_leverage: false
   max_leverage: 1
-  min_order_interval: 3600  # em segundos
+  min_order_interval: 60  # Reduzido para 60 segundos
+  signal_threshold: 0.15  # Novo parâmetro para filtrar sinais
 
 # Configurações de Risco
 risk:
-  max_daily_loss: -0.03    # -3%
-  max_position_size: 0.05  # 5% do capital
-  stop_loss: 0.02         # 2%
-  take_profit: 0.03       # 3%
+  max_daily_loss: -0.02     # Mais conservador: -2%
+  max_position_size: 0.02   # Reduzido para 2% do capital
+  stop_loss: 0.015         # Ajustado para 1.5%
+  take_profit: 0.03        # Mantido em 3%
   max_open_positions: 3
-  min_confidence: 0.8
+  min_confidence: 0.7      # Reduzido para capturar mais sinais
+  max_slippage: 0.001      # Novo: máximo de 0.1% de slippage
+  min_volume_24h: 1000     # Novo: volume mínimo em BTC
 
 # Configurações de Análise
 analysis:
   indicators:
     rsi:
       period: 14
-      oversold: 30
-      overbought: 70
+      oversold: 35        # Ajustado
+      overbought: 65      # Ajustado
     macd:
       fast_period: 12
       slow_period: 26
       signal_period: 9
+      min_strength: 100   # Novo: força mínima do MACD
     bollinger_bands:
       period: 20
       std_dev: 2
+      min_width: 0.015   # Novo: largura mínima
     moving_averages:
       short_period: 9
       long_period: 21
+    adx:                 # Novo indicador
+      period: 14
+      min_strength: 10
+    stochastic:         # Novo indicador
+      k_period: 14
+      d_period: 3
+      oversold: 20
+      overbought: 80
+
+  divergence:           # Nova seção
+    enabled: true
+    min_severity: "low"
+    confirmation_period: 3
 
   ml:
-    confidence_threshold: 0.8
-    training_period: 60    # dias
-    retraining_interval: 24  # horas
+    confidence_threshold: 0.7  # Reduzido para alinhar com min_confidence
+    training_period: 30        # Reduzido para 30 dias
+    retraining_interval: 12    # Reduzido para 12 horas
     features:
       - rsi
       - macd
       - bollinger_bands
       - volume
       - price_change
+      - adx              # Novo feature
+      - stochastic      # Novo feature
 
 # Configurações de Monitoramento
 monitoring:
-  alert_interval: 3600    # 1 hora em segundos
-  report_interval: 86400  # 24 horas em segundos
+  alert_interval: 300     # Reduzido para 5 minutos
+  report_interval: 3600   # Reduzido para 1 hora
   metrics_history_size: 1000
   thresholds:
-    profit_warning: -0.02
-    profit_critical: -0.05
-    latency_warning: 2.0
+    profit_warning: -0.015
+    profit_critical: -0.03
+    latency_warning: 1.0   # Reduzido para maior sensibilidade
     memory_warning: 0.85
-    api_errors_threshold: 3
+    api_errors_threshold: 2 # Mais restritivo
 
-# Configurações de Notificações
-notifications:
-  enabled: true
-  types:
-    - trade_executed
-    - stop_loss_hit
-    - take_profit_hit
-    - error_occurred
-    - daily_summary
-  priorities:
-    high:
-      - error_occurred
-      - stop_loss_hit
-    normal:
-      - trade_executed
-      - take_profit_hit
-    low:
-      - daily_summary
-
-# Configurações de Logs
-logging:
-  level: INFO
-  rotation:
-    max_size: 10485760  # 10MB
-    backup_count: 5
-  separate_files:
-    - trades
-    - errors
-    - performance
-
-# Configurações de API
-api:
-  retry_attempts: 3
-  retry_delay: 5
-  timeout: 30
-  endpoints:
-    base_url: https://api.binance.com
-    testnet: false 
+# Resto do arquivo mantido igual...
