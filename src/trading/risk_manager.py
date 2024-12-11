@@ -103,7 +103,7 @@ class RiskManager:
             logging.error(f"Erro no cálculo do stop loss: {e}")
             return {}
     
-    def update_risk_metrics(self, positions: Dict, current_prices: Dict):
+    def update_risk_metrics(self, positions: Dict, current_prices: Dict) -> Dict:
         """Atualiza métricas de risco"""
         try:
             total_exposure = 0
@@ -145,6 +145,17 @@ class RiskManager:
             
             self.risk_metrics['risk_score'] = exposure_score + drawdown_score
             
+            # Adicionar novas métricas
+            volatility_risk = self._calculate_volatility_risk(positions)
+            correlation_risk = self._calculate_correlation_risk(positions)
+            market_impact = self._estimate_market_impact(positions)
+            
+            self.risk_metrics.update({
+                'volatility_risk': volatility_risk,
+                'correlation_risk': correlation_risk,
+                'market_impact': market_impact
+            })
+            
             return self.risk_metrics
             
         except Exception as e:
@@ -152,7 +163,7 @@ class RiskManager:
             return {}
     
     def can_open_position(self, symbol: str, size: float, capital: float) -> bool:
-        """Verifica se pode abrir nova posiç��o"""
+        """Verifica se pode abrir nova posição"""
         try:
             # Verifica tempo mínimo entre ordens
             if self.last_order_time:
