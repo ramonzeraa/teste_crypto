@@ -357,3 +357,26 @@ class SystemMonitor:
             
         except Exception as e:
             self.logger.error(f"Erro ao enviar alerta: {e}")
+
+    def check_alerts(self):
+        """Verifica condições de alerta"""
+        try:
+            if not self.metrics:
+                return
+            
+            # Verifica métricas de risco
+            risk_metrics = self.metrics.get('risk', {})
+            if isinstance(risk_metrics, dict):  # Verifica se é um dicionário
+                risk_score = float(risk_metrics.get('risk_score', 0))  # Converte para float com valor padrão
+            else:
+                risk_score = 0.0
+            
+            # Verifica se risco está alto
+            if risk_score > 0.8:  # 80% de risco
+                self.send_alert(
+                    f"⚠️ Alerta de Risco Alto\n"
+                    f"Score: {risk_score:.2%}"
+                )
+                
+        except Exception as e:
+            self.logger.error(f"Erro ao verificar alerta: {str(e)}")
