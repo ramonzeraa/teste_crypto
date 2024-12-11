@@ -11,14 +11,14 @@ trading:
 
 # Configurações de Risco
 risk:
-  max_daily_loss: -0.02     # Mais conservador: -2%
-  max_position_size: 0.02   # Reduzido para 2% do capital
-  stop_loss: 0.015         # Ajustado para 1.5%
-  take_profit: 0.03        # Mantido em 3%
-  max_open_positions: 3
-  min_confidence: 0.7      # Reduzido para capturar mais sinais
-  max_slippage: 0.001      # Novo: máximo de 0.1% de slippage
-  min_volume_24h: 1000     # Novo: volume mínimo em BTC
+  max_daily_trades: 10
+  max_daily_drawdown: 0.02  # 2%
+  max_total_exposure: 0.5   # 50% do capital
+  risk_per_trade: 0.01     # 1% por trade
+  capital: 1000.0          # Capital inicial
+  reserve_ratio: 0.1       # 10% de reserva
+  max_position_size: 100.0
+  max_position_ratio: 0.1  # 10% do capital por posição
 
 # Configurações de Análise
 analysis:
