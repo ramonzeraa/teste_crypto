@@ -18,6 +18,7 @@ class TechnicalAnalyzer:
             'stoch': 0.15,
             'adx': 0.10
         }
+        self.logger = logging.getLogger('technical_analyzer')
 
     def analyze(self, data: pd.DataFrame) -> Dict:
         """Análise técnica aprimorada"""
@@ -364,56 +365,118 @@ class TechnicalAnalyzer:
             logging.error(f"Erro na verificação de divergências: {e}")
             return {}
 
-    def _calculate_trend_strength(self, signals: Dict) -> float:
-        """Calcula força da tendência com pesos ajustados"""
+    def _calculate_trend_strength(self, rsi: Dict, macd: Dict, bb: Dict, 
+                                volume: Dict, support_resistance: Dict) -> float:
+        """Calcula força da tendência considerando múltiplos fatores"""
         try:
-            strength = 0.0
+            # Pesos dos indicadores
+            weights = {
+                'rsi': 0.2,
+                'macd': 0.3,
+                'bb': 0.2,
+                'volume': 0.15,
+                'sr': 0.15
+            }
             
-            # RSI
-            if 'rsi' in signals:
-                rsi = signals['rsi']['value']
-                rsi_strength = (rsi - 50) / 50  # Normaliza para [-1, 1]
-                strength += rsi_strength * self.weights['rsi']
+            # Normaliza RSI
+            rsi_strength = (rsi['value'] - 50) / 50
             
-            # MACD
-            if 'macd' in signals:
-                if signals['macd']['crossover']:
-                    strength += self.weights['macd']
-                elif signals['macd']['crossunder']:
-                    strength -= self.weights['macd']
+            # Normaliza MACD
+            macd_strength = np.tanh(macd['value'] / 100)
             
-            # EMAs
-            if all(k in self.indicators for k in ['ema_9', 'ema_21', 'ema_55']):
-                ema_trend = self._analyze_ema()
-                if ema_trend.get('trend') == 'bullish':
-                    strength += self.weights['ema']
-                elif ema_trend.get('trend') == 'bearish':
-                    strength -= self.weights['ema']
+            # Normaliza Bollinger
+            bb_strength = bb['width'] * (1 if bb['trend'] == 'bullish' else -1)
             
-            # Estocástico
-            if 'stoch' in signals:
-                stoch = signals['stoch']
-                if stoch.get('oversold'):
-                    strength += self.weights['stoch'] * 0.5
-                elif stoch.get('overbought'):
-                    strength -= self.weights['stoch'] * 0.5
+            # Normaliza Volume
+            vol_strength = (volume['strength'] - 1) * (1 if volume['trend'] == 'increasing' else -1)
             
-            # ADX
-            if 'adx' in signals:
-                adx = signals['adx']
-                if adx.get('trend_strength') > 25:
-                    strength *= 1.2  # Amplifica o sinal se tendência forte
+            # Calcula força baseada em S/R
+            price = support_resistance['pivot']
+            sr_strength = (price - support_resistance['support_1']) / (
+                support_resistance['resistance_1'] - support_resistance['support_1']
+            ) - 0.5
             
-            # Volume
-            if 'volume' in signals:
-                vol_trend = signals['volume'].get('trend')
-                if vol_trend == 'increasing':
-                    strength *= 1.1
-                elif vol_trend == 'decreasing':
-                    strength *= 0.9
+            # Calcula média ponderada
+            trend_strength = (
+                weights['rsi'] * rsi_strength +
+                weights['macd'] * macd_strength +
+                weights['bb'] * bb_strength +
+                weights['volume'] * vol_strength +
+                weights['sr'] * sr_strength
+            )
             
-            return np.clip(strength, -1, 1)
+            return np.clip(trend_strength, -1, 1)
             
         except Exception as e:
-            logging.error(f"Erro no cálculo da força da tendência: {e}")
+            self.logger.error(f"Erro ao calcular força da tendência: {e}")
             return 0.0
+
+    def _analyze_volume_profile(self, data: pd.DataFrame) -> Dict:
+        """Analisa o perfil do volume"""
+        try:
+            volume = data['volume'].values
+            close = data['close'].values
+            
+            # Calcula volume médio
+            avg_volume = np.mean(volume)
+            
+            # Analisa distribuição do volume
+            volume_trend = 'increasing' if volume[-1] > avg_volume else 'decreasing'
+            
+            # Calcula força do volume
+            volume_strength = volume[-1] / avg_volume
+            
+            # Detecta picos de volume
+            volume_peaks = np.where(volume > avg_volume * 1.5)[0]
+            
+            return {
+                'trend': volume_trend,
+                'strength': volume_strength,
+                'peaks': len(volume_peaks),
+                'average': avg_volume
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Erro na análise de volume: {e}")
+            return {
+                'trend': 'neutral',
+                'strength': 1.0,
+                'peaks': 0,
+                'average': 0
+            }
+
+    def _find_support_resistance(self, data: pd.DataFrame) -> Dict:
+        """Encontra níveis de suporte e resistência"""
+        try:
+            close = data['close'].values
+            high = data['high'].values
+            low = data['low'].values
+            
+            # Calcula níveis usando médias móveis
+            ma20 = np.mean(close[-20:])
+            ma50 = np.mean(close[-50:])
+            
+            # Encontra pivôs
+            pivot = (high[-1] + low[-1] + close[-1]) / 3
+            
+            # Define níveis
+            r1 = 2 * pivot - low[-1]
+            s1 = 2 * pivot - high[-1]
+            
+            return {
+                'support_1': s1,
+                'resistance_1': r1,
+                'ma20': ma20,
+                'ma50': ma50,
+                'pivot': pivot
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao calcular suporte/resistência: {e}")
+            return {
+                'support_1': 0,
+                'resistance_1': 0,
+                'ma20': 0,
+                'ma50': 0,
+                'pivot': 0
+            }
