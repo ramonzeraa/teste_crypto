@@ -52,6 +52,9 @@ class TradingBot:
                 risk_manager=self.risk_manager
             )
             
+            # Inicializa estratégia antes do stream
+            self.strategy = TradingStrategy(self.config.config)
+            
             # Tenta iniciar o stream algumas vezes
             retries = 3
             while retries > 0:
@@ -66,8 +69,6 @@ class TradingBot:
                     time.sleep(2)
             
             self.logger.info("Bot inicializado com sucesso")
-            
-            self.strategy = TradingStrategy(config)
             
         except Exception as e:
             self.logger.error(f"Erro na inicialização do bot", exc_info=True)
