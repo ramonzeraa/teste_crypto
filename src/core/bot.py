@@ -1,5 +1,5 @@
 from src.data.binance_client import BinanceDataLoader
-from src.analysis.technical_analysis import TechnicalAnalyzer
+from src.analysis.technical_analyzer import TechnicalAnalyzer
 from src.analysis.sentiment_analyzer import SentimentAnalyzer
 from src.analysis.ml_analyzer import MLAnalyzer
 from src.utils.config import Config
