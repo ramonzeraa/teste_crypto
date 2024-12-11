@@ -7,6 +7,7 @@ import json
 from twilio.rest import Client
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import time
 
 class SystemMonitor:
     def __init__(self, twilio_sid: str, twilio_token: str, 
@@ -24,7 +25,8 @@ class SystemMonitor:
         self.metrics = {}
         self.errors = []  # Lista de erros
         self.max_errors = 1000  # Máximo de erros armazenados
-        self.last_alert_time = 0
+        self.last_alert_time = time.time()
+        self.start_time = time.time()
         
         self.logger.info("Monitor do sistema inicializado")
         
@@ -53,6 +55,12 @@ class SystemMonitor:
         
         self.last_alert_time = {}
         self.alert_cooldown = 300  # 5 minutos entre alertas do mesmo tipo
+        
+        self.alert_thresholds = {
+            'error': 0,  # Sempre alerta
+            'warning': 300,  # 5 minutos
+            'info': 3600  # 1 hora
+        }
     
     def send_whatsapp(self, message: str, media_url: Optional[str] = None):
         """Envia mensagem via WhatsApp"""
@@ -190,49 +198,162 @@ class SystemMonitor:
             logging.error(f"Erro ao enviar alerta de divergência: {e}")
     
     def update_metrics(self, data: Dict):
-        """Atualiza métricas de monitoramento"""
+        """Atualiza métricas do sistema"""
         try:
-            # Métricas existentes...
-            
-            # Novas métricas
             self.metrics.update({
                 'execution_latency': self._calculate_latency(),
                 'signal_quality': self._evaluate_signal_quality(data),
-                'risk_exposure': self._calculate_risk_exposure(),
-                'market_conditions': self._analyze_market_conditions()
+                'risk_exposure': self._calculate_risk_exposure(data),
+                'market_conditions': self._analyze_market_conditions(data),
+                'system_health': self._check_system_health(),
+                'last_update': datetime.now()
             })
-            
-            # Alertas aprimorados
-            self._check_alerts()
             
         except Exception as e:
             self.logger.error(f"Erro ao atualizar métricas: {e}")
-            raise
-    
+
+    def _calculate_latency(self) -> float:
+        """Calcula latência de execução"""
+        try:
+            return time.time() - self.start_time
+        except Exception as e:
+            self.logger.error(f"Erro ao calcular latência: {e}")
+            return 0.0
+
+    def _evaluate_signal_quality(self, data: Dict) -> float:
+        """Avalia qualidade dos sinais"""
+        try:
+            if not data or 'technical' not in data:
+                return 0.0
+            
+            # Analisa consistência dos sinais
+            signals = data.get('technical', {})
+            consistency = sum(1 for sig in signals.values() if isinstance(sig, dict))
+            return min(consistency / max(len(signals), 1), 1.0)
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao avaliar sinais: {e}")
+            return 0.0
+
+    def _calculate_risk_exposure(self, data: Dict) -> float:
+        """Calcula exposição ao risco"""
+        try:
+            if not data or 'risk' not in data:
+                return 0.0
+            
+            risk_metrics = data.get('risk', {})
+            total_risk = sum(
+                value for key, value in risk_metrics.items()
+                if isinstance(value, (int, float))
+            )
+            return min(total_risk / max(len(risk_metrics), 1), 1.0)
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao calcular risco: {e}")
+            return 0.0
+
+    def _analyze_market_conditions(self, data: Dict) -> Dict:
+        """Analisa condições de mercado"""
+        try:
+            return {
+                'volatility': data.get('technical', {}).get('volatility', 0),
+                'trend_strength': data.get('technical', {}).get('trend_strength', 0),
+                'market_phase': self._determine_market_phase(data)
+            }
+        except Exception as e:
+            self.logger.error(f"Erro ao analisar mercado: {e}")
+            return {}
+
+    def _determine_market_phase(self, data: Dict) -> str:
+        """Determina fase do mercado"""
+        try:
+            if not data or 'technical' not in data:
+                return 'unknown'
+            
+            tech = data['technical']
+            if tech.get('trend_strength', 0) > 0.7:
+                return 'trending'
+            elif tech.get('volatility', 0) > 0.7:
+                return 'volatile'
+            else:
+                return 'ranging'
+                
+        except Exception as e:
+            self.logger.error(f"Erro ao determinar fase: {e}")
+            return 'unknown'
+
+    def _check_system_health(self) -> Dict:
+        """Verifica saúde do sistema"""
+        try:
+            return {
+                'memory_usage': self._get_memory_usage(),
+                'cpu_usage': self._get_cpu_usage(),
+                'error_rate': len(self.errors) / max((time.time() - self.start_time) / 3600, 1),
+                'uptime': time.time() - self.start_time
+            }
+        except Exception as e:
+            self.logger.error(f"Erro ao verificar saúde: {e}")
+            return {}
+
+    def _get_memory_usage(self) -> float:
+        """Obtém uso de memória"""
+        try:
+            import psutil
+            return psutil.Process().memory_percent()
+        except:
+            return 0.0
+
+    def _get_cpu_usage(self) -> float:
+        """Obtém uso de CPU"""
+        try:
+            import psutil
+            return psutil.Process().cpu_percent()
+        except:
+            return 0.0
+
     def report_error(self, error_type: str, error_message: str):
         """Reporta erros do sistema"""
         try:
-            timestamp = datetime.now()
-            
             error_data = {
                 'type': error_type,
                 'message': error_message,
-                'timestamp': timestamp
+                'timestamp': datetime.now()
             }
             
-            # Registra erro
             self.errors.append(error_data)
             
-            # Limita tamanho do histórico de erros
             if len(self.errors) > self.max_errors:
                 self.errors = self.errors[-self.max_errors:]
             
-            # Verifica se deve enviar alerta
             if self._should_send_alert(error_type):
                 self._send_alert(
                     f"Erro: {error_type}",
-                    f"Mensagem: {error_message}\nTimestamp: {timestamp}"
+                    f"Mensagem: {error_message}\nTimestamp: {datetime.now()}"
                 )
             
         except Exception as e:
-            logging.error(f"Erro ao reportar erro: {e}")
+            self.logger.error(f"Erro ao reportar erro: {e}")
+
+    def _should_send_alert(self, error_type: str) -> bool:
+        """Verifica se deve enviar alerta"""
+        try:
+            current_time = time.time()
+            threshold = self.alert_thresholds.get(error_type.lower(), 300)
+            
+            if current_time - float(self.last_alert_time) >= threshold:
+                self.last_alert_time = current_time
+                return True
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao verificar alerta: {e}")
+            return False
+
+    def _send_alert(self, title: str, message: str):
+        """Envia alerta via WhatsApp"""
+        try:
+            # Implementação do envio via Twilio aqui
+            self.logger.info(f"Alerta: {title} - {message}")
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao enviar alerta: {e}")

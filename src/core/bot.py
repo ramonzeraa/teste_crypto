@@ -335,13 +335,18 @@ class TradingBot:
             # Obtém resumo atualizado
             summary = self.portfolio_manager.get_portfolio_summary()
             
+            # Verifica PnL não realizado de forma segura
+            unrealized_pnl = summary.get('metrics', {}).get('total_unrealized_pnl', 0.0)
+            total_positions = summary.get('metrics', {}).get('position_count', 0)
+            return_pct = summary.get('metrics', {}).get('return_pct', 0.0)
+            
             # Notifica se necessário
-            if summary['unrealized_pnl'] < 0 and abs(summary['unrealized_pnl']) > 100:  # $100
+            if unrealized_pnl < -100:  # $100 de perda
                 self.monitor.send_alert(
                     f"⚠️ Alerta de P&L\n"
-                    f"P&L Não Realizado: ${summary['unrealized_pnl']:.2f}\n"
-                    f"Posições Abertas: {summary['total_positions']}\n"
-                    f"Retorno Total: {summary['return_pct']:.2f}%"
+                    f"P&L Não Realizado: ${unrealized_pnl:.2f}\n"
+                    f"Posições Abertas: {total_positions}\n"
+                    f"Retorno Total: {return_pct:.2f}%"
                 )
             
         except Exception as e:
