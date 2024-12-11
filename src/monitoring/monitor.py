@@ -190,3 +190,31 @@ class SystemMonitor:
         except Exception as e:
             self.logger.error(f"Erro ao atualizar métricas: {e}")
             raise
+    
+    def report_error(self, error_type: str, error_message: str):
+        """Reporta erros do sistema"""
+        try:
+            timestamp = datetime.now()
+            
+            error_data = {
+                'type': error_type,
+                'message': error_message,
+                'timestamp': timestamp
+            }
+            
+            # Registra erro
+            self.errors.append(error_data)
+            
+            # Limita tamanho do histórico de erros
+            if len(self.errors) > self.max_errors:
+                self.errors = self.errors[-self.max_errors:]
+            
+            # Verifica se deve enviar alerta
+            if self._should_send_alert(error_type):
+                self._send_alert(
+                    f"Erro: {error_type}",
+                    f"Mensagem: {error_message}\nTimestamp: {timestamp}"
+                )
+            
+        except Exception as e:
+            logging.error(f"Erro ao reportar erro: {e}")
