@@ -20,7 +20,7 @@ class TechnicalAnalyzer:
         }
 
     def analyze(self, data: pd.DataFrame) -> Dict:
-        """Analisa dados técnicos"""
+        """Análise técnica aprimorada"""
         try:
             if data.empty:
                 return {}
@@ -51,11 +51,29 @@ class TechnicalAnalyzer:
             signals['trend_strength'] = self._calculate_trend_strength(signals)
             signals['divergences'] = self._check_divergences(signals)
             
-            return signals
+            # Adicionar novos indicadores
+            volume_profile = self._analyze_volume_profile(data)
+            support_resistance = self._find_support_resistance(data)
+            
+            # Melhorar cálculo de força da tendência
+            trend_strength = self._calculate_trend_strength(
+                rsi=signals['rsi'],
+                macd=signals['macd'],
+                bb=signals['bb'],
+                volume=volume_profile,
+                support_resistance=support_resistance
+            )
+            
+            return {
+                **signals,
+                'volume_profile': volume_profile,
+                'support_resistance': support_resistance,
+                'trend_strength': trend_strength
+            }
             
         except Exception as e:
             logging.error(f"Erro na análise técnica: {e}")
-            return {}
+            raise
 
     def calculate_rsi(self, data: pd.DataFrame, period: int = 14):
         """Calcula RSI"""
